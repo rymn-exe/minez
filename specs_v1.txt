@@ -1,0 +1,311 @@
+Minesweeper Roguelike — Version 1 Specification (Gemini Build Doc)
+
+1. High-Level Concept
+A hostile, roguelike variant of Minesweeper where:
+	•	Number tiles only count mines 
+	•	All other special tiles are invisible to number tiles 
+	•	The game is intentionally not always solvable 
+	•	Players must manage risk, gold, and lives to reach the exit 
+The game emphasizes misinformation, greed, and tension rather than perfect logic.
+
+2. Core Game Flow (Critical)
+Run Flow
+	•	The player starts on Level 1 
+	•	The player clears the level by revealing the ❌ X tile 
+	•	The player is taken to the Shop 
+	•	The player may: 
+	•	Buy Shop Tiles 
+	•	Buy Relics 
+	•	Buy nothing 
+	•	Purchases update the player’s gold total 
+	•	The player clicks Proceed 
+	•	The next level begins 
+	•	Purchased tiles and relics activate automatically 
+	•	This repeats until: 
+	•	The player wins (v1: clears Level 3), or 
+	•	The player loses (runs out of lives) 
+
+3. Win & Loss Conditions (Version 1)
+Win Condition (v1)
+	•	The player wins the run after successfully completing Level 3 
+	•	A Win Screen is shown 
+Loss Condition
+	•	The player loses immediately when their lives reach 0 
+	•	A Loss Screen is shown 
+	•	The run ends; no shop access 
+
+4. Core Rules & Invariants (Must Always Hold)
+	•	Number tiles count only mines 
+	•	Shop tiles and Challenge tiles do not affect numbers unless explicitly stated 
+	•	Each tile occupies exactly one grid cell 
+	•	Revealing the ❌ X tile ends the level immediately 
+	•	Mines always cost −1 life 
+	•	The player always sees a Board Manifest: 
+	•	💣 Total mines 
+	•	❌ Total X tiles 
+	•	🪙 Total Ore tiles 
+	•	🟣 Total Shop tiles 
+	•	🟠 Total Challenge tiles 
+	•	The game may generate unwinnable boards by design 
+	•	All effects must be visible and non-silent 
+
+5. Starting State
+	•	Starting Lives: 3 
+	•	Starting Gold: 0 
+	•	Starting Relics: None 
+	•	Starting Shop Tiles: None 
+
+6. Board & Level Structure
+	•	Grid size (v1): 16 × 16 (configurable) 
+	•	Each level contains: 
+	•	1 ❌ X tile 
+	•	Mines (per level table) 
+	•	🪙 Ore tiles 
+	•	🟠 Challenge tiles 
+	•	🟣 Shop tiles (only if purchased) 
+Level Progression (v1)
+Level
+❌ X
+🪙 Ore
+💣 Mines
+🟠 Challenge Tiles
+1
+1
+2
+50
+None
+2
+1
+2
+50
+5× 💸 Auto Grat, 1× ⏱ Stopwatch
+3
+1
+2
+60
+3× ⏱ Stopwatch, 3× 💱 Bad Deal, 1× 💸 Auto Grat
+
+7. Core Tiles (Always Present)
+Icon
+Name
+Effect
+🟦
+Safe Tile
+Always a 0. Reveals safely and flood-fills.
+🔢
+Number Tile
+Shows number of adjacent mines only.
+💣
+Mine Tile
+Explodes on reveal. −1 life.
+❌
+X Tile
+Ends the level immediately.
+🪙
+Ore Tile
+Gain 1–3 gold on reveal.
+
+8. Economy Rules
+	•	End of each completed level: +3 gold 
+	•	Gold can be: 
+	•	Gained from tiles, relics, bonuses 
+	•	Spent in the shop 
+	•	Lost via challenge effects 
+	•	Gold cannot go below 0 unless explicitly stated 
+
+9. Shop (Between Levels)
+Shop Structure
+	•	Appears after every completed level 
+	•	Contains: 
+	•	3 random Shop Tiles 
+	•	2 random Relics 
+	•	The player may buy any number of items they can afford 
+	•	After purchases, player clicks Proceed to continue 
+Shop Pricing (Version 1)
+Item Type
+Cost
+🟣 Common Shop Tile
+5 gold
+🟣 Uncommon Shop Tile
+7 gold
+🟣 Rare / Very Rare Shop Tile
+10 gold
+🔵 Any Relic
+15 gold
+Prices are fixed for v1.
+
+10. Shop Tiles (Added to Future Tile Pool)
+Purple background + icon when revealed
+Icon
+Name
+Effect (on reveal)
+Rarity
+💎
+Diamond
+Gain +5 gold
+Very Rare
+❤️
+1 Up
+Gain +1 life (stackable)
+Uncommon
+🃏
+Poker Chip
+Marks two tiles: one ❌ X, one 💣 Mine (unknown which). Only once per board
+Uncommon
+🪓
+Pickaxe
+Reveals 2 random adjacent non-mine tiles
+Common
+🧭
+Compass
+Shows arrow pointing toward ❌ X (orthogonal only, fixed at generation)
+Uncommon
+🎟️
+Scratchcard
+Each future special tile revealed this level grants +1 gold
+Very Rare
+👍
+Good Deal
+Lose 1 gold, gain 1 life (no effect if 0 gold)
+Common
+📺
+Remote Control
+Flags a mine (can flag 🍀 2-Leaf Clover)
+Common
+💳
+Advance Payment
+Reveals an Ore tile (if one exists) and gains its gold
+Common
+⚪
+Zirconium
+Gain +1 gold
+Common
+
+11. Challenge Tiles (Hostile Modifiers)
+Orange background + icon when revealed
+Icon
+Name
+Effect
+💸
+Auto Grat
+Steals 3 gold
+⏱️
+Stopwatch
+Must be revealed before ❌ X or explodes for −1 life
+☠️
+Math Test
+Number tiles greater than 1 display as ?
+💱
+Bad Deal
+Gain +1 gold, lose 1 life
+🍀
+2 Leaf Clover
+Counts as a mine for number tiles but does not explode
+🧴
+Snake Oil
+Ore and Diamond tiles grant no gold
+🐍
+Snake Venom
+Lose 1 life every 8 tiles revealed (cannot reduce life below 1)
+🩸
+Blood Pact
+If player has 3+ lives, explodes for −1 life
+🚗
+Car Loan
+Subsequent special tiles cost 1 gold to reveal
+Persistent effects must appear in an Active Effects panel.
+
+12. Relics (Passive Effects)
+Always active once purchased
+Icon
+Name
+Effect
+🏁
+Vexillologist
+Flag all mines correctly → +3 gold
+🥾
+Pioneer
+Start each level with 1 mine flagged
+🧮
+Tax Collector
+Gain +1 gold whenever you gain gold
+🧯
+Diffuser
+−1 mine per level
+📐
+Mathematician
+Reveal the highest number tile at level start
+📈
+Accountant
++1% spawn chance for all special tiles
+♻️
+Minimalist
+Reveal no special tiles → +6 gold
+💠
+Lapidarist
+Revealing a mine grants +3 gold
+🎰
+Gambler
+Mines have 25% chance not to explode
+🛒
+Personal Shopper
+Shop offers +1 relic
+🪙
+Cheapskate
+Start level with 10+ gold → +1 life
+🗺️
+Cartographer
+Reveal all 4 corners → +5 gold
+🏷️
+Couponer
+All future shop costs −1 gold
+🧬
+Resurrector
+End level with 1 life → +1 life
+🎯
+Number Cruncher
+Number tiles have X% chance to grant +1 gold
+🏭
+Entrepreneur
+Spawns 1 additional Ore tile per level
+🧪
+Researcher
+Flags a random challenge tile at level start
+⚖️
+Debt Collector
+Enter level with <0 gold → +1 life
+
+13. Visual Indicators (Version 1)
+Unrevealed Tiles
+	•	All unrevealed tiles appear identical 
+	•	No icons, colors, or hints 
+Revealed Tiles
+	•	Core tiles: neutral visuals 
+	•	Shop tiles: purple background + icon 
+	•	Challenge tiles: orange background + icon 
+Board Manifest (Always Visible)
+	•	💣 Mines remaining 
+	•	🪙 Ore remaining 
+	•	❌ X remaining 
+	•	🟣 Shop tiles remaining 
+	•	🟠 Challenge tiles remaining 
+
+14. Architecture Requirements
+	•	Tile and relic behavior must be data-driven 
+	•	Use an event system: 
+	•	onLevelStart 
+	•	onTileRevealed 
+	•	onGoldGained 
+	•	onLevelEndTriggered 
+	•	onLevelEndResolved 
+	•	Separate board truth from UI state 
+	•	Support deterministic seeded runs for debugging 
+
+15. Version 1 Success Criteria
+Version 1 is successful if:
+	•	A full run can be won or lost 
+	•	Shop purchases meaningfully affect later levels 
+	•	At least one challenge tile creates tension 
+	•	No effect occurs silently 
+	•	No softlocks or unclear states occur
+
