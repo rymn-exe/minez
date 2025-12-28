@@ -215,6 +215,15 @@ export default class GameScene extends Phaser.Scene {
     });
 
     this.renderAll();
+    // Restart button (top-right)
+    const restart = this.add.text(VIEW_WIDTH - 96, 8, 'Restart', {
+      fontFamily: 'monospace',
+      fontSize: '14px',
+      color: '#fca5a5'
+    }).setOrigin(1, 0).setInteractive({ useHandCursor: true });
+    restart.on('pointerdown', () => {
+      this.scene.start('TitleScene');
+    });
   }
 
   private toggleFlag(x: number, y: number) {
@@ -317,11 +326,14 @@ export default class GameScene extends Phaser.Scene {
     const t = this.board.tiles[indexAt(this.board, x, y)];
     if (!t.revealed || t.kind !== TileKind.Number) return;
     const neighs = neighbors(this.board, x, y);
-    const flags = neighs.reduce((acc, p) => {
+    // Count flags + revealed mines toward satisfying the number
+    const satisfied = neighs.reduce((acc, p) => {
       const nt = this.board.tiles[indexAt(this.board, p.x, p.y)];
-      return acc + (nt.flagged ? 1 : 0);
+      const revealedMine = (nt.kind === TileKind.Mine && nt.revealed) ||
+        (nt.kind === TileKind.Challenge && nt.subId === ChallengeId.MegaMine && nt.revealed);
+      return acc + ((nt.flagged || revealedMine) ? 1 : 0);
     }, 0);
-    if (flags !== t.number) return;
+    if (satisfied !== t.number) return;
     for (const p of neighs) {
       const nt = this.board.tiles[indexAt(this.board, p.x, p.y)];
       if (!nt.revealed && !nt.flagged) {
@@ -495,11 +507,17 @@ export default class GameScene extends Phaser.Scene {
   }
 
   private showEndScreen(win: boolean) {
-    const t = this.add.text(VIEW_WIDTH / 2, VIEW_HEIGHT / 2, win ? 'You Win!' : 'You Lose', {
+    const t = this.add.text(VIEW_WIDTH / 2, VIEW_HEIGHT / 2 - 10, win ? 'You Win!' : 'You Lose', {
       fontFamily: 'monospace',
       fontSize: '32px',
       color: '#ffffff'
     }).setOrigin(0.5);
+    const r = this.add.text(VIEW_WIDTH / 2, VIEW_HEIGHT / 2 + 28, 'Restart', {
+      fontFamily: 'monospace',
+      fontSize: '18px',
+      color: '#fca5a5'
+    }).setOrigin(0.5).setInteractive({ useHandCursor: true });
+    r.on('pointerdown', () => this.scene.start('TitleScene'));
   }
 }
 

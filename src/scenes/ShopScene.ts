@@ -96,6 +96,13 @@ export default class ShopScene extends Phaser.Scene {
         runState.persistentEffects.snakeVenom = { active: false, revealsUntilHit: 8 };
         this.scene.start('GameScene');
       });
+    // Restart button (top-right)
+    const restart = this.add.text(this.scale.width - 96, 8, 'Restart', {
+      fontFamily: 'monospace',
+      fontSize: '14px',
+      color: '#fca5a5'
+    }).setOrigin(1, 0).setInteractive({ useHandCursor: true });
+    restart.on('pointerdown', () => this.scene.start('TitleScene'));
   }
 
   private renderOffersList(offers: Offer[], startY: number): number {
