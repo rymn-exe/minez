@@ -21,7 +21,12 @@ export enum ChallengeId {
   SnakeVenom = 'SnakeVenom',
   BloodPact = 'BloodPact',
   CarLoan = 'CarLoan',
-  MegaMine = 'MegaMine'
+  MegaMine = 'MegaMine',
+  BloodDiamond = 'BloodDiamond',
+  FindersFee = 'FindersFee',
+  ATMFee = 'ATMFee',
+  Coal = 'Coal',
+  BoxingDay = 'BoxingDay'
 }
 
 export interface Tile {
@@ -29,6 +34,8 @@ export interface Tile {
   kind: TileKind;
   revealed: boolean;
   flagged: boolean;
+  // Color of the flag when flagged was set; keeps historical color regardless of later selection changes
+  flagColor?: 'white' | 'yellow' | 'blue';
   number: number;
   subId?: string; // Shop or Challenge specific id
   compassDir?: '↑' | '↓' | '←' | '→';

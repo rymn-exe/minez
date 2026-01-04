@@ -51,4 +51,85 @@
 - UI
   - Title updated to “Minez v1.3”.
 
+## v1.4.0 (locked)
+
+- Core and UI
+  - Frontier masking: revealed 0-tiles that border unopened tiles permanently show “?” (no blank edges).
+  - Chording counts revealed mines as “satisfied” around a number.
+  - Restart button only on win/loss screens; teammate pick works after restart.
+  - Proceed flow hardened (Level 2): clicking revealed ❌ immediately resolves and navigates.
+
+- Challenges
+  - New/updated: 🔻 Blood Diamond, 🫴 Finder’s Fee, 🏧 ATM Fee, 🪨 Coal, 🥊 Boxing Day.
+  - 🐍 Snake Venom reworked: 25% chance to lose 1 life on revealing a 3+ number.
+  - 🧴 Snake Oil blocks ⚪/🪙/💎 gold. Finder’s Fee removes end-of-level gold. ATM Fee adds −1 to every gold loss.
+  - Coal replaces Ore at generation (no effect on reveal).
+
+- Shop
+  - New tiles: 🪬 Tarot Card, 🔎 Metal Detector, 🧼 Laundry Money.
+  - Cannot overspend: affordability check includes ATM Fee surcharge.
+  - Owned tile spawn cap removed. For each owned copy, spawn rolls independently with chance p = min(0.95, 0.505 + 0.01×Accountant). ❤️ 1 Up still guaranteed at least once.
+  - Base spawn chance per roll increased to 0.505 (+0.5pp).
+
+- Levels
+  - Levels 1–10 updated to the new composition (Auto Grat/Math Test/Bad Deal/Clover/ATM Fee/Finder’s Fee/Snake Oil/Snake Venom/Car Loan/Blood Pact/Blood Diamond/MegaMine).
+
+## v1.5.1 (locked)
+
+- Shop
+  - Single purchase per shop session; purchased card shows “SOLD” and becomes non-interactive.
+  - Reroll is also marked “SOLD” after any purchase; services cannot be repurchased in the same shop.
+  - Service price labels display numeric value only; coin icon used for currency.
+- UI/UX
+  - Hover text alignment consistent across scenes; small polish to shop cards.
+
+## v1.5.2
+
+- Core
+  - Classic Minesweeper chording restored and hardened. Double‑click a revealed number to open all adjacent unflagged tiles when flags + already‑revealed mines match the number.
+  - Ctrl/Cmd/right‑click flagging works reliably and always targets the hovered tile; paint mode cursor fixed and follows the mouse.
+  - Unrevealed tile hover highlight restored; revealed tiles immediately render semi‑transparent after reveal.
+- Shop
+  - Buying an item no longer auto‑marks Reroll as SOLD. Only the purchased card changes to SOLD.
+  - Hover text spacing corrected (emoji spacing, no odd justification).
+- UI
+  - Right‑panel “Board Manifest”/Collectibles rows get reliable hover (DOM fallback).
+  - Loss screen converted to a proper modal overlay with a clear Restart button.
+  - Version updated to v1.5.2.
+
+## v1.5.3 (locked)
+
+- Core
+  - Auditor collectible now grants +1 gold per stack when any challenge tile is revealed (e.g., Auto Grat).
+  - Researcher flags a random challenge tile with a yellow flag at level start.
+  - Removed debug tile flash so user-opened tiles are the same semi‑transparent color as auto‑opened tiles.
+- Shop
+  - Per‑shop state resets properly; multiple items can be purchased per shop; only the bought card shows SOLD.
+  - Affordability feedback: unaffordable prices briefly shake/red; successful buys update gold immediately.
+  - Service hovers simplified (“Reroll the shop”, “Buy a life”).
+- UI/UX
+  - Board Manifest shows all owned shop tiles even if they didn’t spawn (count 0).
+  - Right panel headings spacing increased; fonts normalized to LTHoop; added one-time font-settle refresh to avoid “changes on first click.”
+  - Suppressed transient Math Test hover text in right panel after reveal.
+  - Flag color picker centered vertically; headings use consistent styling.
+  - Version updated to v1.5.3.
+
+## v1.5.4
+
+- Shop
+  - Even vertical spacing engine for Tiles / Collectibles / Services; Services clamped safely above the hover area on all viewports.
+  - Services row redesigned without borders; icons/prices centered, clearer price sizing, and spacing polish.
+  - One reroll per shop unless the “Gamer” collectible is owned; after reroll, the Reroll service shows SOLD for that shop.
+  - Emoji-only icons for all offers (no sprites).
+- UI/UX
+  - Transparent hover text bars in Shop and Game scenes so text appears to float.
+  - Larger item icons, stronger price typography, subtle icon hover scale.
+  - Consistent headers (size 16) with subtle dividers and better spacing.
+  - Proceed button nudged for better alignment.
+  - Emoji-only rendering across the board (Ore, Diamond, Quartz, Clover, etc.).
+- Fixes
+  - Removed stray text artifacts on Math Test and a few challenges; hover text now only appears in the hover area.
+  - Minor type safety cleanups and layout stability fixes.
+  - Version updated to v1.5.4.
+
 

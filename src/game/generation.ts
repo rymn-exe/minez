@@ -117,30 +117,40 @@ export function generateLevel(width: number, height: number): GenerationResult {
   placeRandomTiles(board, mines, TileKind.Mine, undefined, rand);
   placeRandomTiles(board, ore, TileKind.Ore, undefined, rand);
 
-  // Place challenge tiles (exact counts)
+  // Handle Coal: replace Ore tiles with Coal challenge tiles
+  const coalSpec = levelSpec.challenges.find(c => c.id === ChallengeId.Coal);
+  if (coalSpec && coalSpec.count > 0) {
+    let remaining = coalSpec.count;
+    for (let i = 0; i < board.tiles.length && remaining > 0; i++) {
+      const t = board.tiles[i];
+      if (t.kind === TileKind.Ore) {
+        t.kind = TileKind.Challenge;
+        t.subId = ChallengeId.Coal;
+        remaining--;
+      }
+    }
+  }
+  // Place other challenge tiles (exact counts)
   for (const ch of levelSpec.challenges) {
+    if (ch.id === ChallengeId.Coal) continue; // already handled
     for (let i = 0; i < ch.count; i++) {
       placeSpecialNearMine(board, 1, TileKind.Challenge, ch.id, rand);
     }
   }
 
-  // Place shop tiles from owned pool, cap 2 per level
+  // Place shop tiles from owned pool (no per‑level cap)
   const ownedIds = Object.keys(runState.ownedShopTiles);
-  const pool: string[] = [];
-  for (const id of ownedIds) {
-    const weight = runState.ownedShopTiles[id];
-    for (let i = 0; i < weight; i++) pool.push(id);
-  }
-  // Determine probabilistic shop spawns (not guaranteed). Two independent slots.
   let spawned = 0;
   const accountantStacks = runState.ownedRelics['Accountant'] ?? 0;
   const bonus = Math.min(0.4, 0.01 * accountantStacks); // cap +40%
-  for (let slot = 0; slot < SHOP_SPAWN_CAP_PER_LEVEL; slot++) {
-    const chance = Math.min(0.95, SHOP_BASE_SPAWN_CHANCE + bonus);
-    if (pool.length > 0 && rand() < chance) {
-      const selected = pickRandom(rand, pool);
-      placeSpecialNearMine(board, 1, TileKind.Shop, selected, rand);
-      spawned++;
+  const chance = Math.min(0.95, SHOP_BASE_SPAWN_CHANCE + bonus);
+  for (const id of ownedIds) {
+    const weight = runState.ownedShopTiles[id];
+    for (let i = 0; i < weight; i++) {
+      if (rand() < chance) {
+        placeSpecialNearMine(board, 1, TileKind.Shop, id, rand);
+        spawned++;
+      }
     }
   }
   // Ensure at least one ❤️ 1Up shop tile per level (design request)
@@ -158,6 +168,7 @@ export function generateLevel(width: number, height: number): GenerationResult {
       tile.kind = n === 0 ? TileKind.Safe : TileKind.Number;
     }
   }
+  // Rendering handles frontier masking dynamically (no generation-time markings)
 
   // Assign compass arrow directions for any Compass shop tiles (fixed at generation)
   const xTilesPositions = board.tiles.filter(t => t.kind === TileKind.X).map(t => t.pos);
@@ -207,6 +218,11 @@ export function generateLevel(width: number, height: number): GenerationResult {
   runState.persistentEffects.stopwatchCount = 0;
   // Car Loan should apply from level start if present on the board
   runState.persistentEffects.carLoan = (runState.stats.challengeCounts[ChallengeId.CarLoan] ?? 0) > 0;
+  // Reset per-level toggles
+  (runState.persistentEffects as any).noEndGold = false;
+  (runState.persistentEffects as any).atmFee = (runState.stats.challengeCounts[ChallengeId.ATMFee] ?? 0) > 0 ? true : false;
+  (runState.persistentEffects as any).bloodDiamond = (runState.stats.challengeCounts[ChallengeId.BloodDiamond] ?? 0) > 0 ? true : false;
+  runState.persistentEffects.tarotCard = false;
 
   return { board };
 }

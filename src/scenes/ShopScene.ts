@@ -1,24 +1,172 @@
 import Phaser from 'phaser';
 import { runState } from '../state';
 import { ECONOMY } from '../game/consts';
-import { TILE_DESCRIPTIONS, RELIC_DESCRIPTIONS, EXTRA_RELIC_DESCRIPTIONS } from '../game/descriptions';
+// Terminology update (v1.4): UI shows "Collectible(s)" instead of "Relic(s)".
+// Internal identifiers remain RELIC_* and offer.type 'relic' for compatibility.
+import { TILE_DESCRIPTIONS, RELIC_DESCRIPTIONS, EXTRA_RELIC_DESCRIPTIONS, EXTRA_TILE_DESCRIPTIONS, RELIC_UI_TEXT, TILE_UI_TEXT } from '../game/descriptions';
 import { SHOP_TILES, RELICS, priceForRarity } from '../game/items';
 
 type Offer = { type: 'tile' | 'relic' | 'service'; id: string; price: number; label: string };
 
 export default class ShopScene extends Phaser.Scene {
   private offers: Offer[] = [];
-  private descText!: Phaser.GameObjects.Text;
+  private hoverDescText!: Phaser.GameObjects.Text;
+  private hoverNameText!: Phaser.GameObjects.Text;
   private titleText!: Phaser.GameObjects.Text;
-  private offerEntries: { offer: Offer; text: Phaser.GameObjects.Text }[] = [];
+  private offerEntries: { offer: Offer; priceText: Phaser.GameObjects.Text }[] = [];
+  private purchasedIds: Set<string> = new Set();
+  private servicePurchased: Set<string> = new Set();
+  private svcY: number = 0;
+  private svcRefs: Record<string, { bg: Phaser.GameObjects.GameObject; icon: Phaser.GameObjects.GameObject; priceText: Phaser.GameObjects.Text; coin?: Phaser.GameObjects.GameObject }> = {};
+  private svcTop: number = 0;
+  private svcPriceY: number = 0;
+  private svcIconY: number = 0;
+  // Stats pill number refs (match right panel style)
+  private shopLivesNum?: Phaser.GameObjects.Text;
+  private shopCoinsNum?: Phaser.GameObjects.Text;
+  // Utility: strip leading emoji from a label for cleaner names in cards
+  private displayName(label: string): string {
+    const trimmed = label.trim();
+    const parts = trimmed.split(' ');
+    if (parts.length <= 1) return trimmed;
+    const first = parts[0];
+    // If first token starts with a non-alphanumeric (emoji/punctuation), drop it
+    if (!/^[A-Za-z0-9]/.test(first)) {
+      return parts.slice(1).join(' ');
+    }
+    return trimmed;
+  }
+  // Draw a centered section header with subtle divider line
+  private drawHeader(x: number, y: number, width: number, title: string, color: string) {
+    const header = this.add.text(x + width / 2, y, title, { fontFamily: 'LTHoop', fontSize: '16px', color }).setOrigin(0.5, 0);
+    const lineY = header.getBounds().bottom + 6;
+    const pad = 12;
+    this.add.rectangle(x + pad, lineY, width - pad * 2, 1, 0x32323c).setOrigin(0, 0);
+    // Slightly more breathing room below header before content
+    return header.getBounds().bottom + 20;
+  }
+  // Map an offer id to an emoji glyph used in the shop grid
+  private iconFor(id: string): string {
+    const m: Record<string, string> = {
+      Diamond: '💎',
+      '1Up': '❤️',
+      Pickaxe: '🪓',
+      Compass: '🧭',
+      Scratchcard: '🎟️',
+      GoodDeal: '👍',
+      RemoteControl: '📺',
+      AdvancePayment: '💳',
+      Quartz: '🪨',
+      '2Up': '💞',
+      LuckyCat: '🐈‍⬛',
+      TarotCard: '🪬',
+      MetalDetector: '🔎',
+      LaundryMoney: '🧼',
+      // Relics
+      Vexillologist: '🏁',
+      Pioneer: '🥾',
+      TaxCollector: '🧮',
+      Diffuser: '🧯',
+      Mathematician: '📐',
+      Accountant: '📈',
+      Minimalist: '♻️',
+      Lapidarist: '💠',
+      Gambler: '🎰',
+      PersonalShopper: '🛒',
+      Cheapskate: '🪙',
+      Cartographer: '🗺️',
+      Couponer: '🏷️',
+      Resurrector: '🧬',
+      NumberCruncher: '🎯',
+      Entrepreneur: '🏭',
+      Researcher: '🧪',
+      DebtCollector: '⚖️',
+      Auditor: '🧾',
+      Billionaire: '👑',
+      Investor: '💼',
+      Optimist: '🌞',
+      SugarDaddy: '🎁',
+      FortuneTeller: '🔮',
+      Gamer: '🎮',
+      // Services
+      Reroll: '🎲',
+      BuyLife: '❤️'
+    };
+    return m[id] ?? '•';
+  }
+  // Temporary coin placeholder: small yellow circle (will be replaced by sprite)
+  private drawCoin(x: number, y: number, radius: number = 7) {
+    const coin = this.add.circle(x, y, radius, 0xfacc15, 1);
+    coin.setStrokeStyle(1, 0x8a6c0a);
+    return coin;
+  }
 
   constructor() {
     super('ShopScene');
   }
+  preload() {
+    // Ensure quartz sprite is available before create runs, so we can render it immediately
+    if (!this.textures.exists('quartz_icon')) {
+      this.load.image('quartz_icon', '/assets/sprites/ShopTile-Quartz.png');
+    }
+  }
 
   create() {
+    // Reset per-session state so previous shops don't bleed into new ones
+    this.purchasedIds = new Set();
+    this.servicePurchased = new Set();
+    this.offerEntries = [];
+    // If the shop has already been rerolled once this session and the player
+    // does NOT own Gamer, pre-mark Reroll as SOLD after the restart
+    {
+      const hasGamer = ((runState.ownedRelics['Gamer'] ?? 0) > 0);
+      const rerolled = !!((runState.persistentEffects as any).rerolledThisShop);
+      if (rerolled && !hasGamer) {
+        this.servicePurchased.add('Reroll');
+      }
+    }
     this.cameras.main.setBackgroundColor('#14141c');
-    this.titleText = this.add.text(24, 24, `Shop — Gold: ${runState.gold}`, { fontFamily: 'monospace', fontSize: '20px', color: '#e9e9ef' });
+    // Subtle animated background dots
+    {
+      const colors = [0xa78bfa, 0x7dd3fc, 0x9ae6b4, 0xfca5a5];
+      for (let i = 0; i < 36; i++) {
+        const x = Math.random() * this.scale.width;
+        const y = Math.random() * this.scale.height;
+        const r = 2 + Math.random() * 2;
+        const c = colors[i % colors.length];
+        const dot = this.add.circle(x, y, r, c, 1).setAlpha(0.0).setDepth(0);
+        this.tweens.add({
+          targets: dot,
+          alpha: { from: 0.0, to: 0.12 },
+          duration: 1500 + Math.random() * 1500,
+          yoyo: true,
+          repeat: -1,
+          delay: Math.random() * 2000,
+          onYoyo: () => {
+            dot.x += (Math.random() - 0.5) * 8;
+            dot.y += (Math.random() - 0.5) * 6;
+          }
+        });
+      }
+    }
+    // Header and stats (centered title, pills on right)
+    this.titleText = this.add.text(this.scale.width / 2, 18, 'Shop', { fontFamily: 'LTHoop', fontSize: '28px', color: '#e9e9ef' }).setOrigin(0.5, 0);
+    // Draw lives/coins pills (styled like right panel)
+    {
+      const emojiFont = 'LTHoop, "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif';
+      const drawPill = (emoji: string, value: number, x: number, kind: 'lives' | 'coins') => {
+        const radius = 16;
+        const y = 18 + radius;
+        const bg = this.add.circle(x, y, radius, 0x2e2e39, 1).setStrokeStyle(1, 0x3a3a46).setOrigin(0.5);
+        const icon = this.add.text(x, y - 10, emoji, { fontFamily: emojiFont, fontSize: '20px', color: '#e9e9ef' }).setOrigin(0.5, 0);
+        const num = this.add.text(x + radius + 8, y - 8, String(value), { fontFamily: 'LTHoop', fontSize: '16px', color: '#e9e9ef' }).setOrigin(0, 0);
+        if (kind === 'lives') this.shopLivesNum = num; else this.shopCoinsNum = num;
+        return num.getBounds().right;
+      };
+      const startX = this.scale.width - 240;
+      const right1 = drawPill('❤️', runState.lives, startX, 'lives');
+      drawPill('🟡', runState.gold, right1 + 22, 'coins');
+    }
 
     // Generate offers (v2 pools)
     const shopPool: Offer[] = SHOP_TILES.map(t => ({
@@ -30,7 +178,7 @@ export default class ShopScene extends Phaser.Scene {
     let relicPool: Offer[] = RELICS.map(r => ({
       type: 'relic',
       id: r.id,
-      price: priceForRarity(r.rarity) + 5, // relics base 15, still aligns with v1 pricing
+      price: priceForRarity(r.rarity) + 5, // collectibles base 15, still aligns with v1 pricing
       label: r.label
     }));
     // Filter Sugar Daddy rules:
@@ -56,37 +204,135 @@ export default class ShopScene extends Phaser.Scene {
     const relicOffers = pickN(relicPool, 2 + extraRelics);
     this.offers = [...tileOffers, ...relicOffers];
 
-    // Description panel anchored near bottom so it doesn't overlap lists
-    this.descText = this.add.text(24, this.scale.height - 110, '', {
-      fontFamily: 'monospace',
+    // Layout metrics (readable layout)
+    const margin = 24;
+    const sectionGap = 60;
+    const fullW = this.scale.width - margin * 2;
+    const colGap = 36;
+    const rowGap = 28;
+    let topY = 64;
+    // Footer hover metrics (needed for clamping earlier sections)
+    const hoverH = 40;
+    const hoverY = this.scale.height - hoverH - 28;
+    const hoverW = this.scale.width - margin * 2;
+
+    // Even vertical spacing anchors between top header and hover area
+    const servicesMaxTop = hoverY - 120;
+    const tilesHeaderTop = topY;
+    const servicesHeaderTop = servicesMaxTop;
+    const collectiblesHeaderTop = Math.round(tilesHeaderTop + (servicesHeaderTop - tilesHeaderTop) / 2);
+
+    // Tiles row (full width)
+    const tilesTitleBottom = this.drawHeader(margin, tilesHeaderTop, fullW, 'Tiles', '#a78bfa');
+    const tilesCols = Math.max(1, tileOffers.length); // one centered row like prototype
+    this.renderOffersGrid(tileOffers, margin, tilesTitleBottom, fullW, tilesCols, colGap, rowGap);
+
+    // Collectibles row (full width)
+    const relicsTitleBottom = this.drawHeader(margin, collectiblesHeaderTop, fullW, 'Collectibles', '#7dd3fc');
+    const relicCols = Math.max(1, relicOffers.length);
+    this.renderOffersGrid(relicOffers, margin, relicsTitleBottom, fullW, relicCols, colGap, rowGap);
+
+    // Footer hover text area (transparent so hover text appears to float)
+    this.add.rectangle(margin, hoverY, hoverW, hoverH, 0x000000, 0).setOrigin(0, 0);
+    const emojiFont = 'LTHoop, "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif';
+    this.hoverNameText = this.add.text(margin + 12, hoverY + 8, '', {
+      fontFamily: emojiFont,
+      fontSize: '14px',
+      color: '#a78bfa'
+    }).setOrigin(0, 0).setDepth(4001);
+    this.hoverDescText = this.add.text(margin + 12, hoverY + 8, '', {
+      fontFamily: emojiFont,
       fontSize: '14px',
       color: '#cfd2ff',
-      wordWrap: { width: 592, useAdvancedWrap: true }
-    }).setOrigin(0, 0);
+      align: 'left'
+    }).setOrigin(0, 0).setDepth(4001);
 
-    // Sections
-    let y = 64;
-    this.add.text(24, y, 'Shop Tiles', { fontFamily: 'monospace', fontSize: '16px', color: '#a78bfa' });
-    y += 16;
-    y = this.renderOffersList(tileOffers, y + 8);
+    // Services section — header with divider at computed anchor
+    const servicesTitleBottom = this.drawHeader(margin, servicesHeaderTop, fullW, 'Services', '#9ae6b4');
+    const svcTop = servicesTitleBottom + 12;
+    const svcColW = 160;
+    const svcGapX = 80;
+    const totalW = 2 * svcColW + svcGapX;
+    const servicesX = Math.floor(this.scale.width / 2 - totalW / 2);
+    const drawServiceCard = (x: number, id: 'Reroll' | 'BuyLife', price: number, hover: string) => {
+      const emoji = this.iconFor(id);
+      const centerX = x + svcColW / 2;
+      // Invisible interaction zone instead of a visible box
+      const bg = this.add.zone(centerX, svcTop + 28, svcColW, 70).setOrigin(0.5).setInteractive({ useHandCursor: true });
+      const icon = this.add.text(centerX, svcTop, emoji, { fontFamily: 'LTHoop', fontSize: '34px', color: '#e9e9ef' }).setOrigin(0.5, 0);
+      // Centered price group, nudged lower to avoid overlap with headers
+      const prStr = `${price}`;
+      const priceBaseY = svcTop + 44;
+      const pText = this.add.text(0, priceBaseY, prStr, { fontFamily: 'LTHoop', fontSize: '18px', fontStyle: 'bold', color: '#e9e9ef' }).setOrigin(0, 0.5);
+      const grpW = 7 * 2 + 4 + pText.width;
+      const left = centerX - grpW / 2;
+      const svcCoin = this.drawCoin(left + 7, priceBaseY, 7);
+      pText.setX(left + 7 * 2 + 4);
+      const priceText = pText;
+      // keep refs for targeted updates
+      this.svcRefs[id] = { bg, icon, priceText, coin: svcCoin };
+      const click = () => {
+        if (this.servicePurchased.has(id)) return;
+        const fake: any = { type: 'service', id, price, label: id };
+        this.purchase(fake);
+        this.servicePurchased.add(id);
+        // Mark this service card SOLD and disable interactivity
+        icon.setText('SOLD');
+        priceText.setText('');
+        if (svcCoin) svcCoin.setVisible(false);
+        (bg as any).disableInteractive?.();
+        (icon as any).disableInteractive?.();
+        (priceText as any).disableInteractive?.();
+        this.shopLivesNum?.setText(String(runState.lives));
+        this.shopCoinsNum?.setText(String(runState.gold));
+      };
+      [bg, icon, priceText, svcCoin].forEach(el =>
+        (el as any).setInteractive?.({ useHandCursor: true })
+          .on?.('pointerdown', click)
+          .on?.('pointerover', () => this.setHover(id === 'Reroll' ? 'Reroll' : 'Buy Life', 'service', hover))
+          .on?.('pointerout', () => this.clearHover())
+      );
+      // If already flagged as purchased, render SOLD immediately
+      if (this.servicePurchased.has(id)) {
+        icon.setText('SOLD');
+        priceText.setText('');
+        if (svcCoin) svcCoin.setVisible(false);
+        (bg as any).disableInteractive?.();
+        (icon as any).disableInteractive?.();
+        (priceText as any).disableInteractive?.();
+      }
+    };
+    drawServiceCard(servicesX, 'Reroll', 2, 'Reroll the shop');
+    drawServiceCard(servicesX + svcColW + svcGapX, 'BuyLife', 3, 'Buy a life');
 
-    y += 12;
-    this.add.text(24, y, 'Relics', { fontFamily: 'monospace', fontSize: '16px', color: '#a7f3d0' });
-    y += 24;
-    y = this.renderOffersList(relicOffers, y);
-
-    // Services section (e.g., Buy Life)
-    const services: Offer[] = [
-      { type: 'service', id: 'BuyLife', price: 3, label: '❤️ Buy Life' },
-      { type: 'service', id: 'Reroll', price: 2, label: '🔁 Reroll Shop' }
-    ];
-    y += 12;
-    this.add.text(24, y, 'Services', { fontFamily: 'monospace', fontSize: '16px', color: '#f9d3b4' });
-    y += 24;
-    this.renderOffersList(services, y);
-
-    const proceed = this.add.text(24, this.scale.height - 40, 'Proceed ▶', { fontFamily: 'monospace', fontSize: '18px', color: '#9ae6b4' })
+    // Proceed bottom-right (semi-transparent rounded button with LTHoop font)
+    // Position proceed button ABOVE the hover bar so it doesn't overlap
+    const proceedY = hoverY - 18;
+    {
+      const btnW = 160;
+      const btnH = 44;
+      const btnX = this.scale.width - 12 - btnW / 2;
+      const btnY = proceedY;
+      const btnGfx = this.add.graphics().setDepth(1000);
+      const drawBtn = (hover: boolean) => {
+        btnGfx.clear();
+        btnGfx.lineStyle(1, 0x3a3a46, 1);
+        // Slightly brighter on hover; semi-transparent at rest
+        btnGfx.fillStyle(hover ? 0x353542 : 0x2a2a34, hover ? 0.75 : 0.6);
+        btnGfx.fillRoundedRect(btnX - btnW / 2, btnY - btnH / 2, btnW, btnH, 10);
+        btnGfx.strokeRoundedRect(btnX - btnW / 2, btnY - btnH / 2, btnW, btnH, 10);
+      };
+      drawBtn(false);
+      const label = this.add.text(btnX, btnY, 'Proceed ▶', {
+        fontFamily: 'LTHoop',
+        fontSize: '20px',
+        color: '#9ae6b4'
+      }).setOrigin(0.5).setDepth(1001);
+      const zone = this.add.zone(btnX, btnY, btnW + 12, btnH + 12)
+        .setOrigin(0.5)
       .setInteractive({ useHandCursor: true })
+        .on('pointerover', () => drawBtn(true))
+        .on('pointerout', () => drawBtn(false))
       .on('pointerdown', () => {
         runState.level += 1;
         // Reset persistent effects
@@ -96,50 +342,163 @@ export default class ShopScene extends Phaser.Scene {
         runState.persistentEffects.snakeVenom = { active: false, revealsUntilHit: 8 };
         this.scene.start('GameScene');
       });
-    // Restart button (top-right)
-    const restart = this.add.text(this.scale.width - 96, 8, 'Restart', {
-      fontFamily: 'monospace',
-      fontSize: '14px',
-      color: '#fca5a5'
-    }).setOrigin(1, 0).setInteractive({ useHandCursor: true });
-    restart.on('pointerdown', () => this.scene.start('TitleScene'));
+      // Keep label above the graphics; zone is invisible and captures input
+    }
   }
 
-  private renderOffersList(offers: Offer[], startY: number): number {
+  // Grid renderer (n columns, wraps as needed)
+  private renderOffersGrid(offers: Offer[], startX: number, startY: number, boxWidth: number, cols: number, colGap: number, rowGap: number): number {
+    let x = startX;
     let y = startY;
+    let col = 0;
+    const cardW = Math.floor((boxWidth - (cols - 1) * colGap) / cols);
+    const cardH = 88;
     offers.forEach((offer) => {
-      const bg = this.add.rectangle(24, y, 592, 48, 0x242430, 1).setOrigin(0, 0);
-      bg.setStrokeStyle(1, 0x3a3a46);
-      const t = this.add.text(36, y + 12, this.priceLabel(offer), { fontFamily: 'monospace', fontSize: '16px', color: '#e9e9ef' });
-      const desc = offer.type === 'tile'
-        ? (TILE_DESCRIPTIONS[offer.id] ?? '')
-        : offer.type === 'relic'
-          ? (RELIC_DESCRIPTIONS[offer.id] ?? EXTRA_RELIC_DESCRIPTIONS[offer.id] ?? '')
-          : (offer.id === 'BuyLife' ? 'Purchase +1 life immediately' : 'Reroll the current offers');
-      bg.setInteractive({ useHandCursor: true });
-      bg.on('pointerdown', () => {
-        this.purchase(offer);
-        this.titleText.setText(`Shop — Gold: ${runState.gold}`);
-        this.refreshAllPriceLabels();
-      });
-      // Also accept clicks on the text itself to avoid “two clicks” (text overlay blocking rect)
-      t.setInteractive({ useHandCursor: true });
-      t.on('pointerdown', () => {
-        this.purchase(offer);
-        this.titleText.setText(`Shop — Gold: ${runState.gold}`);
-        this.refreshAllPriceLabels();
-      });
-      bg.on('pointerover', () => {
-        this.descText.setText(`${offer.label}: ${desc ?? 'No description available.'}`);
-      });
-      bg.on('pointerout', () => {
-        this.descText.setText('');
-      });
-      t.setText(this.priceLabel(offer));
-      this.offerEntries.push({ offer, text: t });
-      y += 56;
+      this.renderOfferCard(offer, x, y, cardW, cardH);
+      col++;
+      if (col >= cols) {
+        col = 0;
+        x = startX;
+        y += cardH + rowGap;
+      } else {
+        x += cardW + colGap;
+      }
     });
-    return y;
+    return y + cardH;
+  }
+
+  // Single offer entry – large icon with name and price beneath (no outer card)
+  private renderOfferCard(offer: Offer, x: number, y: number, w: number, h: number) {
+    const centerX = x + Math.floor(w / 2);
+    const topY = y + 6;
+    const iconBoxSize = 64;
+    const iconTop = topY;
+
+    // Hover description (compute once)
+    const desc = offer.type === 'tile'
+      ? ((TILE_UI_TEXT as any)[offer.id] ?? (TILE_DESCRIPTIONS as any)[offer.id] ?? (EXTRA_TILE_DESCRIPTIONS as any)[offer.id] ?? '')
+      : offer.type === 'relic'
+        ? ((RELIC_UI_TEXT as any)[offer.id] ?? RELIC_DESCRIPTIONS[offer.id] ?? EXTRA_RELIC_DESCRIPTIONS[offer.id] ?? '')
+        : (offer.id === 'BuyLife' ? 'Buy a life' : 'Reroll the shop');
+
+    // Icon tile (square behind the emoji) – only for Tiles
+    const iconTile = (offer.type === 'tile')
+      ? this.add.rectangle(centerX - iconBoxSize / 2, iconTop, iconBoxSize, iconBoxSize, 0x22232a, 1)
+          .setOrigin(0, 0)
+          .setStrokeStyle(1, 0x2e2e39)
+      : null;
+    // Icon (emoji only)
+    let iconObj: Phaser.GameObjects.GameObject | null = null;
+    {
+      const emoji = this.iconFor(offer.id);
+      iconObj = this.add.text(centerX, iconTop + iconBoxSize / 2, emoji, { fontFamily: 'LTHoop, "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif', fontSize: '38px', color: '#e9e9ef' }).setOrigin(0.5, 0.5);
+    }
+    ;[iconTile, iconObj].filter(Boolean).forEach(el => (el as any).setInteractive({ useHandCursor: true })
+      .on('pointerdown', () => this.purchaseAndRefresh(offer))
+      .on('pointerover', () => {
+        if (iconObj) this.tweens.add({ targets: iconObj, scale: 1.04, duration: 120, ease: 'Quad.easeOut' });
+        this.setHover(offer.label, offer.type, desc);
+      })
+      .on('pointerout', () => {
+        if (iconObj) this.tweens.add({ targets: iconObj, scale: 1.0, duration: 120, ease: 'Quad.easeOut' });
+        this.clearHover();
+      }));
+    // Name
+    const name = this.displayName(offer.label);
+    const nameText = this.add.text(centerX, iconTop + iconBoxSize + 6, name, { fontFamily: 'LTHoop', fontSize: '18px', color: '#e9e9ef' }).setOrigin(0.5, 0);
+    nameText.setInteractive({ useHandCursor: true })
+      .on('pointerover', () => this.setHover(offer.label, offer.type, desc))
+      .on('pointerout', () => this.clearHover())
+      .on('pointerdown', () => this.purchaseAndRefresh(offer));
+    // Price
+    const priceY = iconTop + iconBoxSize + 28;
+    const coinR = 7;
+    const priceStr = `${this.effectivePrice(offer)}`;
+    const priceText = this.add.text(0, priceY + 8, priceStr, { fontFamily: 'LTHoop', fontSize: '18px', fontStyle: 'bold', color: '#e9e9ef' }).setOrigin(0, 0.5);
+    const groupWidth = coinR * 2 + 4 + priceText.width;
+    const groupLeft = centerX - groupWidth / 2;
+    const coin = this.drawCoin(groupLeft + coinR, priceY + 8, coinR);
+    priceText.setX(groupLeft + coinR * 2 + 4);
+    priceText.setInteractive({ useHandCursor: true })
+      .on('pointerover', () => this.setHover(offer.label, offer.type, desc))
+      .on('pointerout', () => this.clearHover())
+      .on('pointerdown', () => this.purchaseAndRefresh(offer));
+    coin.setInteractive({ useHandCursor: true })
+      .on('pointerover', () => this.setHover(offer.label, offer.type, desc))
+      .on('pointerout', () => this.clearHover())
+      .on('pointerdown', () => this.purchaseAndRefresh(offer));
+    // Track for price refresh
+    this.offerEntries.push({ offer, priceText });
+  }
+
+  private effectivePrice(offer: Offer): number {
+    const base = Math.max(0, offer.price - (runState.ownedRelics['Couponer'] ?? 0));
+    return runState.shopFreePurchases > 0 ? 0 : base;
+  }
+
+  private markRerollSold() {
+    // Flag so future clicks are blocked and future renders are SOLD
+    this.servicePurchased.add('Reroll');
+    // Target only the Reroll service UI; do not touch item prices
+    const ref = this.svcRefs['Reroll'];
+    if (ref) {
+      (ref.icon as any).setText('SOLD');
+      ref.priceText.setText('');
+      (ref.bg as any).disableInteractive?.();
+      (ref.icon as any).disableInteractive?.();
+      (ref.priceText as any).disableInteractive?.();
+      if (ref.coin) (ref.coin as any).setVisible(false);
+    }
+  }
+
+  private purchaseAndRefresh(offer: Offer) {
+    // Allow multiple purchases per shop; individual offers can only be bought once
+    // Prevent rebuy of the same offer within this shop session
+    if (this.purchasedIds.has(offer.id)) {
+      return;
+    }
+    // Check affordability before attempting purchase (respecting coupon/ATM fee)
+    const base = Math.max(0, offer.price - (runState.ownedRelics['Couponer'] ?? 0));
+    const totalCost = base + (base > 0 && (runState.persistentEffects as any).atmFee ? 1 : 0);
+    if (offer.type !== 'service' && totalCost > runState.gold) {
+      // Not affordable: give quick visual feedback on the card price
+      const entry = this.offerEntries.find(e => e.offer === offer);
+      if (entry?.priceText) {
+        const originalColor = (entry.priceText as any).style?.color || '#e9e9ef';
+        entry.priceText.setColor('#fca5a5');
+        this.tweens.add({
+          targets: entry.priceText,
+          x: entry.priceText.x + 4,
+          yoyo: true,
+          repeat: 3,
+          duration: 40,
+          onComplete: () => entry.priceText.setColor(originalColor)
+        });
+      }
+      return;
+    }
+    const beforeGold = runState.gold;
+    this.purchase(offer);
+    // If purchase didn't go through (not enough gold), bail out
+    if (offer.type !== 'service' && totalCost > 0 && runState.gold === beforeGold) {
+      return;
+    }
+    if (offer.type !== 'service') {
+      this.purchasedIds.add(offer.id);
+      const entry = this.offerEntries.find(e => e.offer === offer);
+      if (entry) {
+        entry.priceText.setText('SOLD');
+        (entry.priceText as any).disableInteractive?.();
+      }
+    this.refreshAllPriceLabels();
+    }
+    this.shopLivesNum?.setText(String(runState.lives));
+    this.shopCoinsNum?.setText(String(runState.gold));
+  }
+
+  // Legacy list renderer (unused) – keep for compatibility, returns startY
+  private renderOffersList(_offers: Offer[], startY: number): number {
+    return startY;
   }
 
   // (no in-place rerender helpers; reroll restarts the scene)
@@ -152,7 +511,11 @@ export default class ShopScene extends Phaser.Scene {
 
   private refreshAllPriceLabels() {
     for (const entry of this.offerEntries) {
-      entry.text.setText(this.priceLabel(entry.offer));
+      if (this.purchasedIds.has(entry.offer.id)) {
+        entry.priceText.setText('SOLD');
+      } else {
+        entry.priceText.setText(`${this.effectivePrice(entry.offer)}`);
+      }
     }
   }
 
@@ -175,8 +538,13 @@ export default class ShopScene extends Phaser.Scene {
       finalPrice = 0;
       runState.shopFreePurchases -= 1;
     }
-    if (runState.gold < finalPrice) return;
-    runState.gold -= finalPrice;
+    // Affordability check must include ATM Fee surcharge (if any)
+    const atmExtra = finalPrice > 0 && (runState.persistentEffects as any).atmFee ? 1 : 0;
+    const totalCost = finalPrice + atmExtra;
+    if (runState.gold < totalCost) return;
+    if (totalCost > 0) {
+      runState.gold -= totalCost;
+    }
 
     if (offer.type === 'tile') {
       runState.ownedShopTiles[offer.id] = (runState.ownedShopTiles[offer.id] ?? 0) + 1;
@@ -199,6 +567,8 @@ export default class ShopScene extends Phaser.Scene {
         runState.lives += 1;
       }
       if (offer.id === 'Reroll') {
+        // Record that we've used our one reroll for this shop (unless Gamer)
+        (runState.persistentEffects as any).rerolledThisShop = true;
         // Restart scene to regenerate offers cleanly
         this.scene.restart();
         return;
@@ -206,6 +576,34 @@ export default class ShopScene extends Phaser.Scene {
     }
     // After purchase, update price labels in case the free credit was consumed
     this.refreshAllPriceLabels();
+  }
+
+  private clearHover() {
+    this.hoverNameText.setText('');
+    this.hoverDescText.setText('');
+  }
+
+  private setHover(name: string, kind: 'tile' | 'relic' | 'service', desc: string) {
+    const color = kind === 'tile' ? '#a78bfa' : kind === 'relic' ? '#7dd3fc' : '#9ae6b4';
+    // Ensure a space after a leading emoji without breaking surrogate pairs
+    if (name && name.length > 0) {
+      const cp = name.codePointAt(0);
+      if (cp !== undefined) {
+        const firstLen = cp > 0xffff ? 2 : 1;
+        const firstChar = String.fromCodePoint(cp);
+        const looksEmoji = /\p{Emoji}/u.test(firstChar);
+        const hasSpace = name[firstLen] === ' ';
+        if (looksEmoji && !hasSpace) {
+          name = firstChar + ' ' + name.slice(firstLen);
+        }
+      }
+    }
+    this.hoverNameText.setColor(color);
+    this.hoverNameText.setText(name ? `${name}:` : '');
+    // Position description just after the name prefix
+    this.hoverDescText.setText(desc ? ' ' + desc : '');
+    this.hoverDescText.setX(this.hoverNameText.x + this.hoverNameText.width + 6);
+    this.hoverDescText.setY(this.hoverNameText.y);
   }
 }
 

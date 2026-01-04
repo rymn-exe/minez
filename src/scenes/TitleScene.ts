@@ -9,34 +9,74 @@ export default class TitleScene extends Phaser.Scene {
   constructor() {
     super('TitleScene');
   }
+  private started = false;
 
   create() {
+    // Reset start guard when returning to title
+    this.started = false;
     this.cameras.main.setBackgroundColor('#0f0f13');
 
-    this.add.text(VIEW_WIDTH / 2, 180, 'MINEZ', {
-      fontFamily: 'monospace',
-      fontSize: '72px',
-      color: '#e9e9ef'
-    }).setOrigin(0.5);
+    // Animated title: gentle per-letter wave
+    {
+      const titleText = 'MINEZ';
+      const style = { fontFamily: 'GrapeSoda', fontSize: '72px', color: '#e9e9ef' } as Phaser.Types.GameObjects.Text.TextStyle;
+      const baselineY = 180;
+      const letterObjs: Phaser.GameObjects.Text[] = [];
+      // First measure total width
+      const tempLetters = titleText.split('').map(ch => this.add.text(0, 0, ch, style).setOrigin(0, 0.5).setVisible(false));
+      const spacing = 4;
+      const totalW = tempLetters.reduce((w, t) => w + t.width, 0) + spacing * (tempLetters.length - 1);
+      const startX = VIEW_WIDTH / 2 - totalW / 2;
+      // Position visible letters and destroy temps
+      let xCursor = startX;
+      tempLetters.forEach(t => {
+        const ch = t.text;
+        t.destroy();
+        const letter = this.add.text(xCursor, baselineY, ch, style).setOrigin(0, 0.5);
+        letterObjs.push(letter);
+        xCursor += letter.width + spacing;
+      });
+      // Gentle wave
+      const amplitude = 6;
+      letterObjs.forEach((letter, idx) => {
+        this.tweens.add({
+          targets: letter,
+          y: baselineY - amplitude,
+          duration: 1000,
+          ease: 'Sine.easeInOut',
+          yoyo: true,
+          repeat: -1,
+          delay: idx * 120
+        });
+      });
+    }
 
-    this.add.text(VIEW_WIDTH / 2, 240, 'Roguelike Minesweeper', {
-      fontFamily: 'monospace',
-      fontSize: '20px',
-      color: '#9aa0a6'
-    }).setOrigin(0.5);
+    // Subtitle removed per request
 
-    const startBtn = this.add.rectangle(VIEW_WIDTH / 2, 360, 260, 56, 0x2a2a34)
-      .setStrokeStyle(1, 0x3a3a46)
-      .setInteractive({ useHandCursor: true })
-      .setDepth(10);
-    const startText = this.drawButtonLabel('Start', startBtn);
-    startText.setDepth(11);
-
-    startBtn.on('pointerover', () => startBtn.setFillStyle(0x353542));
-    startBtn.on('pointerout', () => startBtn.setFillStyle(0x2a2a34));
+    // Start button as a container with a rounded background graphics
+    const startCont = this.add.container(VIEW_WIDTH / 2, 360).setDepth(1000);
+    const startGfx = this.add.graphics();
+    const drawBtn = (hover: boolean) => {
+      startGfx.clear();
+      startGfx.lineStyle(1, 0x3a3a46, 1);
+      startGfx.fillStyle(hover ? 0x353542 : 0x2a2a34, 1);
+      // draw centered rounded rect (260x56, radius 10)
+      startGfx.fillRoundedRect(-130, -28, 260, 56, 10);
+      startGfx.strokeRoundedRect(-130, -28, 260, 56, 10);
+    };
+    drawBtn(false);
+    const startText = this.add.text(0, 0, 'Start', { fontFamily: 'LTHoop', fontSize: '24px', color: '#9ae6b4' }).setOrigin(0.5);
+    startCont.add([startGfx, startText]);
+    // Create a larger invisible zone above the button for rock-solid hover/click
+    const startZone = this.add.zone(VIEW_WIDTH / 2, 360, 340, 100)
+      .setOrigin(0.5)
+      .setDepth(1100)
+      .setInteractive({ useHandCursor: true });
+    startZone.on('pointerover', () => drawBtn(true));
+    startZone.on('pointerout', () => drawBtn(false));
     const beginRun = () => {
-      // Guard against multiple starts
-      if (this.scene.isActive('TeammateScene')) return;
+      if (this.started) return;
+      this.started = true;
       // Debug trace to diagnose input issues in the wild
       // eslint-disable-next-line no-console
       console.log('[Minez] Starting new run → TeammateScene');
@@ -71,28 +111,52 @@ export default class TitleScene extends Phaser.Scene {
       };
       this.scene.start('TeammateScene');
     };
-    startBtn.on('pointerdown', beginRun);
-    // Also make the label clickable for convenience
-    startText.setInteractive({ useHandCursor: true }).on('pointerdown', beginRun);
-    // Optional: allow keyboard and click-anywhere to start to avoid focus issues
+    startZone.on('pointerdown', beginRun);
+    // Subtle animated background dots
+    {
+      const colors = [0xa78bfa, 0x7dd3fc, 0x9ae6b4, 0xfca5a5, 0xf59e0b];
+      for (let i = 0; i < 64; i++) {
+        const x = Math.random() * VIEW_WIDTH;
+        const y = Math.random() * VIEW_HEIGHT;
+        const r = 2 + Math.random() * 2;
+        const c = colors[i % colors.length];
+        const dot = this.add.circle(x, y, r, c, 1).setAlpha(0.0).setDepth(0);
+        this.tweens.add({
+          targets: dot,
+          alpha: { from: 0.0, to: 0.22 },
+          duration: 1500 + Math.random() * 1500,
+          yoyo: true,
+          repeat: -1,
+          delay: Math.random() * 2000,
+          onYoyo: () => {
+            // small drift
+            dot.x += (Math.random() - 0.5) * 8;
+            dot.y += (Math.random() - 0.5) * 6;
+          }
+        });
+      }
+    }
+    // Also allow keyboard to start (does not auto-advance)
     this.input.keyboard?.once('keydown-ENTER', beginRun);
     this.input.keyboard?.once('keydown-SPACE', beginRun);
-    this.input.keyboard?.once('keydown', beginRun);
-    // As a last resort, clicking anywhere on the background starts the run
-    this.input.once('pointerdown', (p: Phaser.Input.Pointer, g: any) => {
-      // If the user clicked the button/label, the handler above already ran
-      // Only fire if we haven't switched scenes yet
-      if (!this.scene.isActive('TeammateScene')) beginRun();
-    });
-    // Final fallback: auto-advance after a short delay if nothing was clickable
-    this.time.delayedCall(2000, () => {
-      if (!this.scene.isActive('TeammateScene')) beginRun();
-    });
+
+    // Version label (bottom-right) in title font
+    {
+      const m = (document.title || '').match(/v[\d.]+/);
+      const ver = m ? m[0] : '';
+      if (ver) {
+        this.add.text(VIEW_WIDTH - 12, VIEW_HEIGHT - 10, ver, {
+          fontFamily: 'GrapeSoda',
+          fontSize: '20px',
+          color: '#e9e9ef'
+        }).setOrigin(1, 1).setAlpha(0.9);
+      }
+    }
   }
 
   private drawButtonLabel(text: string, rect: Phaser.GameObjects.Rectangle) {
     const label = this.add.text(rect.x, rect.y, text, {
-      fontFamily: 'monospace',
+      fontFamily: 'LTHoop',
       fontSize: '24px',
       color: '#9ae6b4'
     }).setOrigin(0.5);

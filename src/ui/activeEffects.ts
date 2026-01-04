@@ -6,7 +6,7 @@ export class ActiveEffectsPanel {
 
   constructor(scene: Phaser.Scene, x: number, y: number) {
     this.text = scene.add.text(x, y, '', {
-      fontFamily: 'monospace',
+      fontFamily: 'LTHoop',
       fontSize: '14px',
       color: '#e9e9ef',
       wordWrap: { width: 190, useAdvancedWrap: true }
@@ -17,10 +17,13 @@ export class ActiveEffectsPanel {
   refresh() {
     const lines: string[] = [];
     // Death-related
-    if (runState.persistentEffects.snakeVenom.active) lines.push('🐍 Snake Venom: Revealing 🪙/⚪/💎 costs 1 life (min 1)');
+    if (runState.persistentEffects.snakeVenom.active) lines.push('🐍 Snake Venom: Revealing a 3+ has 25% chance to lose 1 life');
+    if ((runState.persistentEffects as any).bloodDiamond) lines.push('🔻 Blood Diamond: ⚪/🪙/💎 also cost 1 life');
     // Economy
     if (runState.persistentEffects.carLoan) lines.push('🚗 Car Loan: Special tiles cost 1g');
-    if (runState.persistentEffects.snakeOil) lines.push('🧴 Snake Oil: Ore/Diamond give 0g');
+    if (runState.persistentEffects.snakeOil) lines.push('🧴 Snake Oil: ⚪/🪙/💎 give 0g');
+    if ((runState.persistentEffects as any).atmFee) lines.push('🏧 ATM Fee: Every gold loss costs +1 more');
+    if ((runState.persistentEffects as any).noEndGold) lines.push('🫴 Finder’s Fee: No end-of-level gold');
     // Informational
     if (runState.persistentEffects.mathTest) lines.push('☠️ Math Test: Numbers >1 show ?');
     this.text.setText(lines.join('\n'));

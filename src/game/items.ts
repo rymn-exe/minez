@@ -1,3 +1,6 @@
+// Legacy note: if any code or comments still mention "Zirconium", it now means "Quartz".
+// Terminology update (v1.4): UI shows "Collectible(s)" instead of "Relic(s)".
+// Code keeps RELIC_* identifiers for compatibility with saved runs.
 export type Rarity = 'Common' | 'Uncommon' | 'Rare' | 'VeryRare';
 
 export interface ShopTileDef {
@@ -20,10 +23,12 @@ export const SHOP_TILES: ShopTileDef[] = [
   { id: 'GoodDeal', label: '👍 Good Deal', rarity: 'Common' },
   { id: 'RemoteControl', label: '📺 Remote Control', rarity: 'Common' },
   { id: 'AdvancePayment', label: '💳 Advance Payment', rarity: 'Common' },
-  { id: 'Zirconium', label: '⚪ Zirconium', rarity: 'Common' },
-  { id: 'Magnet', label: '🧲 Magnet', rarity: 'Uncommon' },
+  { id: 'Quartz', label: 'Quartz', rarity: 'Common' },
   { id: '2Up', label: '💞 2 Up', rarity: 'VeryRare' },
-  { id: 'LuckyCat', label: '🐈‍⬛ Lucky Cat', rarity: 'Uncommon' }
+  { id: 'LuckyCat', label: '🐈‍⬛ Lucky Cat', rarity: 'Uncommon' },
+  { id: 'TarotCard', label: '🪬 Tarot Card', rarity: 'Uncommon' },
+  { id: 'MetalDetector', label: '🔎 Metal Detector', rarity: 'Uncommon' },
+  { id: 'LaundryMoney', label: '🧼 Laundry Money', rarity: 'Uncommon' }
 ];
 
 export const RELICS: RelicDef[] = [
@@ -50,7 +55,8 @@ export const RELICS: RelicDef[] = [
   { id: 'Investor', label: '💼 Investor', rarity: 'Rare' },
   { id: 'Optimist', label: '🌞 Optimist', rarity: 'Rare' },
   { id: 'SugarDaddy', label: '🎁 Sugar Daddy', rarity: 'Rare' },
-  { id: 'FortuneTeller', label: '🔮 Fortune Teller', rarity: 'Uncommon' }
+  { id: 'FortuneTeller', label: '🔮 Fortune Teller', rarity: 'Uncommon' },
+  { id: 'Gamer', label: '🎮 Gamer', rarity: 'Rare' }
 ];
 
 export function priceForRarity(r: Rarity): number {

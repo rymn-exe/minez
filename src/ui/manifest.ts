@@ -1,8 +1,10 @@
 import Phaser from 'phaser';
 import { runState } from '../state';
+// Terminology update (v1.4): UI shows "Collectible(s)" instead of "Relic(s)".
+// Internal identifiers remain RELIC_* for compatibility.
 import { SHOP_TILES, RELICS } from '../game/items';
 import { ChallengeId } from '../game/types';
-import { TILE_DESCRIPTIONS, CHALLENGE_DESCRIPTIONS, RELIC_DESCRIPTIONS, EXTRA_RELIC_DESCRIPTIONS } from '../game/descriptions';
+import { TILE_DESCRIPTIONS, CHALLENGE_DESCRIPTIONS, RELIC_DESCRIPTIONS, EXTRA_RELIC_DESCRIPTIONS, EXTRA_TILE_DESCRIPTIONS, RELIC_UI_TEXT, TILE_UI_TEXT, CHALLENGE_UI_TEXT } from '../game/descriptions';
 
 export class ManifestPanel {
   private scene: Phaser.Scene;
@@ -10,37 +12,152 @@ export class ManifestPanel {
   private shopTexts: Phaser.GameObjects.Text[] = [];
   private challengeTexts: Phaser.GameObjects.Text[] = [];
   private relicTexts: Phaser.GameObjects.Text[] = [];
-  private tooltipText: Phaser.GameObjects.Text;
+  private extraNodes: Phaser.GameObjects.GameObject[] = [];
+  private tooltipNameText: Phaser.GameObjects.Text;
+  private tooltipDescText: Phaser.GameObjects.Text;
   private x: number;
   private y: number;
   private contentBottomY: number = 0;
+  private hoverProxy?: (name: string, color: string, desc: string) => void;
+  private clearHoverProxy?: () => void;
+  private statBadges: Phaser.GameObjects.GameObject[] = [];
+  // DOM fallback regions for hover routing when Phaser input is unavailable
+  private domRegions: Array<{ x: number; y: number; w: number; h: number; over: () => void; out: () => void }> = [];
+  private domLastIdx: number = -1;
+  // Row references for flashing
+  private shopRowById: Record<string, Phaser.GameObjects.Text> = {};
+  private challengeRowById: Record<string, Phaser.GameObjects.Text> = {};
+  // Stat pill number refs
+  private levelNum?: Phaser.GameObjects.Text;
+  private livesNum?: Phaser.GameObjects.Text;
+  private coinsNum?: Phaser.GameObjects.Text;
 
-  constructor(scene: Phaser.Scene, x: number, y: number) {
+  constructor(scene: Phaser.Scene, x: number, y: number, opts?: { hoverProxy?: (name: string, color: string, desc: string) => void; clearHoverProxy?: () => void }) {
     this.scene = scene;
     this.x = x;
     this.y = y;
-    this.statsText = scene.add.text(x, y, '', { fontFamily: 'monospace', fontSize: '14px', color: '#e9e9ef' }).setOrigin(0, 0);
-    this.tooltipText = scene.add.text(x, y, '', {
-      fontFamily: 'monospace',
+    this.hoverProxy = opts?.hoverProxy;
+    this.clearHoverProxy = opts?.clearHoverProxy;
+    this.statsText = scene.add.text(x, y, '', { fontFamily: 'LTHoop', fontSize: '14px', color: '#e9e9ef' }).setOrigin(0, 0);
+    const emojiFont = 'LTHoop, "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif';
+    this.tooltipNameText = scene.add.text(x, y, '', {
+      fontFamily: emojiFont,
+      fontSize: '12px',
+      color: '#a78bfa'
+    }).setOrigin(0, 0);
+    this.tooltipDescText = scene.add.text(x, y, '', {
+      fontFamily: emojiFont,
       fontSize: '12px',
       color: '#cfd2ff',
-      wordWrap: { width: 190, useAdvancedWrap: true }
+      wordWrap: { width: 190, useAdvancedWrap: true },
+      align: 'left'
     }).setOrigin(0, 0);
+    // If using external hover bar, keep internal tooltip hidden
+    if (this.hoverProxy) {
+      this.tooltipNameText.setVisible(false);
+      this.tooltipDescText.setVisible(false);
+    }
     this.refresh();
   }
 
   refresh() {
-    // Top stats
-    const lines = [
-      `Lives: ${runState.lives}`,
-      `Gold: ${runState.gold}`,
-      `Level: ${runState.level}`,
-      `Mines: ${runState.stats.minesTotal}`,
-      `Ore: ${runState.stats.oreTotal}`,
-      `X: ${runState.stats.xRemaining}`
-    ];
-    this.statsText.setText(lines.join('\n'));
-    let cursorY = this.statsText.getBounds().bottom + 4;
+    // Cleanup any prior dynamic nodes (icons/images)
+    this.extraNodes.forEach(n => n.destroy());
+    this.extraNodes = [];
+    // Reset dom regions
+    this.domRegions = [];
+    this.domLastIdx = -1;
+    // Clear old stat badges
+    this.statBadges.forEach(b => b.destroy());
+    this.statBadges = [];
+    this.statsText.setText('');
+    // Draw main side panel background (rounded)
+    {
+      const mainX = Math.max(12, this.x - 12);
+      const panelW = Math.min(360, this.scene.scale.width - mainX - 12);
+      const panelHBase = Math.max(280, this.scene.scale.height - this.y - 30);
+      const hoverReserved = 68; // GameScene hover bar (40) + bottom margin (28)
+      const panelTop = this.y - 10;
+      const maxH = Math.max(160, this.scene.scale.height - panelTop - (hoverReserved + 10)); // keep a small gap above hover
+      const panelH = Math.min(panelHBase, maxH);
+      const bg = this.scene.add.graphics().setDepth(-20);
+      bg.fillStyle(0x14151d, 1);
+      bg.lineStyle(1, 0x2b2d38, 1);
+      bg.fillRoundedRect(mainX, this.y - 10, panelW, panelH, 16);
+      bg.strokeRoundedRect(mainX, this.y - 10, panelW, panelH, 16);
+      this.extraNodes.push(bg);
+      // Removed single wide capsule; stats are now individual rounded pills
+    }
+    // Top stats as icon badges (Level, Lives, Coins)
+    const pillsTopY = this.y + 10;
+    const emojiFont = 'LTHoop, "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif';
+    const drawPill = (emoji: string, value: number, x: number, hoverMsg: string, kind: 'level' | 'lives' | 'coins') => {
+      // Create texts first to measure
+      const icon = this.scene.add.text(0, 0, emoji, {
+        fontFamily: emojiFont,
+        fontSize: '18px',
+        color: '#cfd2ff'
+      }).setOrigin(0, 0.5).setDepth(20);
+      const num = this.scene.add.text(0, 0, String(value), {
+        fontFamily: 'LTHoop',
+        fontSize: '17px',
+        fontStyle: 'bold',
+        color: '#ffffff'
+      }).setOrigin(0, 0.5).setDepth(20);
+      if (kind === 'level') this.levelNum = num;
+      if (kind === 'lives') this.livesNum = num;
+      if (kind === 'coins') this.coinsNum = num;
+      const padX = 10;
+      const gap = 8;
+      const padY = 6;
+      const contentH = Math.max(icon.height, num.height);
+      const pillH = Math.max(28, Math.ceil(contentH + padY * 2));
+      const pillW = Math.ceil(padX + icon.width + gap + num.width + padX);
+      // Background rounded rect
+      const bg = this.scene.add.graphics().setDepth(-5);
+      bg.lineStyle(1, 0x3a3a46, 1);
+      bg.fillStyle(0x1a1b23, 1);
+      bg.fillRoundedRect(x, pillsTopY, pillW, pillH, Math.floor(pillH / 2));
+      bg.strokeRoundedRect(x, pillsTopY, pillW, pillH, Math.floor(pillH / 2));
+      // Position texts centered vertically
+      icon.setPosition(x + padX, pillsTopY + pillH / 2);
+      num.setPosition(x + padX + icon.width + gap, pillsTopY + pillH / 2);
+      // Register DOM region for hover fallback
+      const over = () => {
+        if (this.hoverProxy) this.hoverProxy('', '#e9e9ef', hoverMsg);
+        else this.showTooltip('', '#e9e9ef', hoverMsg);
+      };
+      const out = () => {
+        if (this.clearHoverProxy) this.clearHoverProxy(); else this.clearTooltip();
+      };
+      this.domRegions.push({ x, y: pillsTopY, w: pillW, h: pillH, over, out });
+      // Hover wiring
+      const attachHover = (el: Phaser.GameObjects.GameObject) => {
+        (el as any).setInteractive?.({ useHandCursor: false });
+        (el as any).on?.('pointerover', () => {
+          if (this.hoverProxy) this.hoverProxy('', '#e9e9ef', hoverMsg);
+          else this.showTooltip('', '#e9e9ef', hoverMsg);
+        });
+        (el as any).on?.('pointerout', () => {
+          if (this.clearHoverProxy) this.clearHoverProxy();
+          else this.clearTooltip();
+        });
+      };
+      attachHover(bg);
+      attachHover(icon as any);
+      attachHover(num as any);
+      this.statBadges.push(bg, icon, num);
+      return { right: x + pillW, bottom: pillsTopY + pillH };
+    };
+    // Draw three pills with spacing
+    const gapX = 12;
+    let nextX = this.x + 16;
+    const levelPill = drawPill('🪜', runState.level, nextX, `You're on Level ${runState.level}`, 'level');
+    nextX = levelPill.right + gapX;
+    const livesPill = drawPill('❤️', runState.lives, nextX, `You have ${runState.lives} lives`, 'lives');
+    nextX = livesPill.right + gapX;
+    const coinsPill = drawPill('🟡', runState.gold, nextX, `You have ${runState.gold} coins`, 'coins');
+    let cursorY = coinsPill.bottom + 10;
 
     // Clear previous lists
     this.shopTexts.forEach(t => t.destroy());
@@ -49,37 +166,50 @@ export class ManifestPanel {
     this.shopTexts = [];
     this.challengeTexts = [];
     this.relicTexts = [];
-    this.tooltipText.setText('');
+    this.tooltipNameText.setText('');
+    this.tooltipDescText.setText('');
 
-    // Shop breakdown
+    // Board Manifest (card-style list)
+    const goodColor = '#9ae6b4';
+    const badColor = '#fca5a5';
+    this.shopTexts.push(this.scene.add.text(this.x, cursorY, 'Board Manifest', { fontFamily: 'LTHoop', fontSize: '16px', fontStyle: 'bold', color: '#e9e9ef' }).setOrigin(0, 0));
+    cursorY += 16;
+    // Compute right edge inside the panel, so we can right-align counts
+    const mainX2 = Math.max(12, this.x - 12);
+    const panelW2 = Math.min(360, this.scene.scale.width - mainX2 - 12);
+    const cardLeft = this.x - 2;
+    const cardRight = mainX2 + panelW2 - 12;
+    const countRightX = cardRight - 10;
+    const cardGfx = this.scene.add.graphics().setDepth(-18);
+    this.extraNodes.push(cardGfx);
+    const rowsTopY = cursorY + 16; // add extra breathing room below header
+    let rowY = rowsTopY;
+    const rowH = 18;
     const shopLabelById: Record<string, string> = {};
     for (const t of SHOP_TILES) shopLabelById[t.id] = t.label;
-    // Show all owned shop tiles, even if count is 0 this level
-    const ownedShopIds = Object.keys(runState.ownedShopTiles || {});
-    if (ownedShopIds.length > 0) {
-      this.shopTexts.push(this.scene.add.text(this.x, cursorY, 'Shop Tiles:', { fontFamily: 'monospace', fontSize: '14px', color: '#a78bfa' }).setOrigin(0, 0));
-      cursorY += 16;
-      const displayIds = Array.from(new Set<string>([...ownedShopIds, ...Object.keys(runState.stats.shopCounts || {})]));
-      for (const id of displayIds.sort((a, b) => (shopLabelById[a] || a).localeCompare(shopLabelById[b] || b))) {
-        const n = runState.stats.shopCounts[id] ?? 0;
-        const txt = this.scene.add.text(this.x + 12, cursorY, `${shopLabelById[id] ?? id}: ${n}`, { fontFamily: 'monospace', fontSize: '14px', color: '#e9e9ef' }).setOrigin(0, 0);
-        txt.setInteractive({ useHandCursor: true });
-        const desc = TILE_DESCRIPTIONS[id] ?? '';
-        txt.on('pointerover', () => this.tooltipText.setText(desc));
-        txt.on('pointerout', () => this.tooltipText.setText(''));
-        this.shopTexts.push(txt);
-        cursorY += 16;
-      }
-    } else {
-      this.shopTexts.push(this.scene.add.text(this.x, cursorY, 'Shop Tiles: 0', { fontFamily: 'monospace', fontSize: '14px', color: '#a78bfa' }).setOrigin(0, 0));
-      cursorY += 16;
-    }
-
-    // Challenge breakdown
+    const shopIcon = (id: string) => {
+      const m: Record<string, string> = {
+        Diamond: '💎',
+        '1Up': '❤️',
+        Pickaxe: '🪓',
+        Compass: '🧭',
+        Scratchcard: '🎟️',
+        GoodDeal: '👍',
+        RemoteControl: '📺',
+        AdvancePayment: '💳',
+        Quartz: '🪨',
+        '2Up': '💞',
+        LuckyCat: '🐈‍⬛',
+        TarotCard: '🪬',
+        MetalDetector: '🔎',
+        LaundryMoney: '🧼'
+      };
+      return m[id] ?? '🟣';
+    };
+    // Build unified manifest rows (good + bad)
     const challengeLabel = (id: string) => {
       switch (id) {
         case ChallengeId.AutoGrat: return '💸 Auto Grat';
-        // Stopwatch disabled for now
         case ChallengeId.MathTest: return '☠️ Math Test';
         case ChallengeId.BadDeal: return '💱 Bad Deal';
         case ChallengeId.Clover2: return '🍀 2-Leaf Clover';
@@ -88,59 +218,266 @@ export class ManifestPanel {
         case ChallengeId.BloodPact: return '🩸 Blood Pact';
         case ChallengeId.CarLoan: return '🚗 Car Loan';
         case ChallengeId.MegaMine: return '💥 MegaMine';
+        case ChallengeId.BloodDiamond: return '🔻 Blood Diamond';
+        case ChallengeId.FindersFee: return '🫴 Finder’s Fee';
+        case ChallengeId.ATMFee: return '🏧 ATM Fee';
+        case ChallengeId.Coal: return '🪨 Coal';
+        case ChallengeId.BoxingDay: return '🥊 Boxing Day';
         default: return id;
       }
     };
-    // Show active challenge counts (Stopwatch removed)
-    const challengeEntries = Object.entries(runState.stats.challengeCounts)
-      .filter(([id]) => id !== String(ChallengeId.Stopwatch))
-      .filter(([, n]) => n > 0);
-    if (challengeEntries.length > 0) {
-      this.challengeTexts.push(this.scene.add.text(this.x, cursorY, 'Challenges:', { fontFamily: 'monospace', fontSize: '14px', color: '#a7f3d0' }).setOrigin(0, 0));
-      cursorY += 16;
-      for (const [id, n] of challengeEntries.sort((a, b) => challengeLabel(a[0]).localeCompare(challengeLabel(b[0])))) {
-        const txt = this.scene.add.text(this.x + 12, cursorY, `${challengeLabel(id)}: ${n}`, { fontFamily: 'monospace', fontSize: '14px', color: '#e9e9ef' }).setOrigin(0, 0);
-        txt.setInteractive({ useHandCursor: true });
-        const desc = CHALLENGE_DESCRIPTIONS[id] ?? '';
-        txt.on('pointerover', () => this.tooltipText.setText(desc));
-        txt.on('pointerout', () => this.tooltipText.setText(''));
-        this.challengeTexts.push(txt);
-        cursorY += 16;
-      }
-    } else {
-      this.challengeTexts.push(this.scene.add.text(this.x, cursorY, 'Challenges: 0', { fontFamily: 'monospace', fontSize: '14px', color: '#a7f3d0' }).setOrigin(0, 0));
-      cursorY += 16;
+    // Good entries
+    const goodEntries: Array<{ label: string; n: number; id?: string; type: 'builtin' | 'shop' }> = [];
+    goodEntries.push({ label: '🪙 Ore', n: runState.stats.oreTotal, type: 'builtin' });
+    goodEntries.push({ label: '❌ Exit', n: runState.stats.xRemaining, type: 'builtin' });
+    const stripLeadingEmoji = (s: string) => {
+      if (!s) return s;
+      const cp = s.codePointAt(0);
+      if (cp === undefined) return s;
+      const first = String.fromCodePoint(cp);
+      const firstLen = cp > 0xffff ? 2 : 1;
+      const looksEmoji = /\p{Emoji}/u.test(first);
+      if (!looksEmoji) return s;
+      const rest = s.slice(firstLen);
+      return rest.startsWith(' ') ? rest.slice(1) : rest;
+    };
+    const seenShopIds: Record<string, boolean> = {};
+    for (const [id, n] of Object.entries(runState.stats.shopCounts || {})) {
+      const cleanName = stripLeadingEmoji(shopLabelById[id] ?? id);
+      goodEntries.push({ label: `${shopIcon(id)} ${cleanName}`, n: n as number, id, type: 'shop' });
+      seenShopIds[id] = true;
     }
+    // Ensure owned shop tiles appear even if they didn't spawn this level (count 0)
+    for (const [ownedId, count] of Object.entries(runState.ownedShopTiles || {})) {
+      if (seenShopIds[ownedId]) continue;
+      const cleanName = stripLeadingEmoji(shopLabelById[ownedId] ?? ownedId);
+      goodEntries.push({ label: `${shopIcon(ownedId)} ${cleanName}`, n: 0, id: ownedId, type: 'shop' });
+    }
+    // Bad entries
+    const badEntries: Array<{ label: string; n: number; id?: string; type: 'builtin' | 'challenge' }> = [];
+    badEntries.push({ label: '💣 Mines', n: runState.stats.minesTotal, type: 'builtin' });
+    const challengeEntries = Object.entries(runState.stats.challengeCounts).filter(([id]) => id !== String(ChallengeId.Stopwatch));
+    for (const [id, n] of challengeEntries) {
+      badEntries.push({ label: challengeLabel(id), n: n as number, id, type: 'challenge' });
+    }
+    // Draw rows: good then bad
+    const drawRow = (labelText: string, count: number, labelColor: string, hoverId?: { kind: 'shop' | 'builtinGood' | 'challenge' | 'builtinBad'; id?: string }) => {
+      const leftText = this.scene.add.text(this.x + 10, rowY, labelText, { fontFamily: 'LTHoop', fontSize: '14px', color: labelColor }).setOrigin(0, 0).setDepth(20);
+      // Make counts use the same font styling and grey color as labels
+      const rightText = this.scene.add.text(countRightX, rowY, String(count), { fontFamily: 'LTHoop', fontSize: '14px', color: labelColor }).setOrigin(1, 0).setDepth(20);
+      this.shopTexts.push(leftText, rightText);
+      // index for flashing later
+      if (hoverId?.kind === 'shop' && hoverId.id) this.shopRowById[hoverId.id] = leftText;
+      if (hoverId?.kind === 'challenge' && hoverId.id) this.challengeRowById[hoverId.id] = leftText;
+      // Hover bindings
+      const bind = (el: Phaser.GameObjects.GameObject) => {
+        (el as any).setInteractive?.({ useHandCursor: true });
+        el.on?.('pointerover', () => {
+          if (hoverId?.kind === 'shop' && hoverId.id) {
+            const name = shopLabelById[hoverId.id] ?? hoverId.id;
+            const desc = (TILE_UI_TEXT as any)[hoverId.id] ?? (TILE_DESCRIPTIONS as any)[hoverId.id] ?? (EXTRA_TILE_DESCRIPTIONS as any)[hoverId.id] ?? '';
+            if (this.hoverProxy) this.hoverProxy(name, goodColor, desc); else this.showTooltip(name, goodColor, desc);
+          } else if (hoverId?.kind === 'builtinGood') {
+            const name = labelText;
+            const desc = labelText.includes('Ore') ? 'Reveals gold when opened' : 'Exit tile; proceed after reveal';
+            if (this.hoverProxy) this.hoverProxy(name, goodColor, desc); else this.showTooltip(name, goodColor, desc);
+          } else if (hoverId?.kind === 'challenge' && hoverId.id) {
+            const name = challengeLabel(hoverId.id);
+            const desc = (CHALLENGE_UI_TEXT as any)[hoverId.id] ?? CHALLENGE_DESCRIPTIONS[hoverId.id] ?? '';
+            if (this.hoverProxy) this.hoverProxy(name, badColor, desc); else this.showTooltip(name, badColor, desc);
+    } else {
+            const name = labelText;
+            const desc = '';
+            if (this.hoverProxy) this.hoverProxy(name, '#e9e9ef', desc); else this.showTooltip(name, '#e9e9ef', desc);
+          }
+        });
+        el.on?.('pointerout', () => {
+          if (this.clearHoverProxy) this.clearHoverProxy(); else this.clearTooltip();
+        });
+      };
+      bind(leftText); bind(rightText);
+      // Register DOM region for hover fallback
+      const regionOver = () => {
+        if (hoverId?.kind === 'shop' && hoverId.id) {
+          const name = shopLabelById[hoverId.id] ?? hoverId.id;
+          const desc = (TILE_UI_TEXT as any)[hoverId.id] ?? (TILE_DESCRIPTIONS as any)[hoverId.id] ?? (EXTRA_TILE_DESCRIPTIONS as any)[hoverId.id] ?? '';
+          if (this.hoverProxy) this.hoverProxy(name, goodColor, desc); else this.showTooltip(name, goodColor, desc);
+        } else if (hoverId?.kind === 'builtinGood') {
+          const desc = labelText.includes('Ore') ? 'Reveals gold when opened' : 'Exit tile; proceed after reveal';
+          if (this.hoverProxy) this.hoverProxy(labelText, goodColor, desc); else this.showTooltip(labelText, goodColor, desc);
+        } else if (hoverId?.kind === 'challenge' && hoverId.id) {
+          const name = challengeLabel(hoverId.id);
+          const desc = (CHALLENGE_UI_TEXT as any)[hoverId.id] ?? CHALLENGE_DESCRIPTIONS[hoverId.id] ?? '';
+          if (this.hoverProxy) this.hoverProxy(name, badColor, desc); else this.showTooltip(name, badColor, desc);
+        } else {
+          if (this.hoverProxy) this.hoverProxy(labelText, '#e9e9ef', ''); else this.showTooltip(labelText, '#e9e9ef', '');
+        }
+      };
+      const fullW = Math.max(220, cardRight - cardLeft) - 20;
+      this.domRegions.push({ x: this.x + 10, y: rowY, w: fullW, h: rowH, over: regionOver, out: () => { if (this.clearHoverProxy) this.clearHoverProxy(); else this.clearTooltip(); } });
+      rowY += rowH;
+    };
+    const mutedLabel = '#9aa0a6';
+    for (const e of goodEntries.sort((a, b) => a.label.localeCompare(b.label))) {
+      if (e.type === 'shop' && e.id) drawRow(e.label, e.n, mutedLabel, { kind: 'shop', id: e.id });
+      else drawRow(e.label, e.n, mutedLabel, { kind: 'builtinGood' });
+    }
+    for (const e of badEntries.sort((a, b) => a.label.localeCompare(b.label))) {
+      if (e.type === 'challenge' && e.id) drawRow(e.label, e.n, mutedLabel, { kind: 'challenge', id: e.id });
+      else drawRow(e.label, e.n, mutedLabel, { kind: 'builtinBad' });
+    }
+    // Draw card background now that we know height
+    const cardHeight = (rowY - rowsTopY) + 12;
+    cardGfx.lineStyle(1, 0x2b2d38, 1);
+    cardGfx.fillStyle(0x171922, 1);
+    cardGfx.fillRoundedRect(cardLeft, rowsTopY - 8, Math.max(220, cardRight - cardLeft), cardHeight, 12);
+    cardGfx.strokeRoundedRect(cardLeft, rowsTopY - 8, Math.max(220, cardRight - cardLeft), cardHeight, 12);
+    cursorY = rowsTopY - 8 + cardHeight + 14; // extra breathing room below the card
 
-    // Relics breakdown (owned relics with stack counts)
+    // (Old 'Challenges' list removed in favor of Tile Distribution breakdown)
+
+    // Collectibles breakdown (owned stacks)
     const relicLabelById: Record<string, string> = {};
     for (const r of RELICS) relicLabelById[r.id] = r.label;
     const ownedRelics = runState.ownedRelics || {};
     const relicIds = Object.keys(ownedRelics);
     if (relicIds.length > 0) {
-      this.relicTexts.push(this.scene.add.text(this.x, cursorY, 'Relics:', { fontFamily: 'monospace', fontSize: '14px', color: '#7dd3fc' }).setOrigin(0, 0));
-      cursorY += 16;
+      this.relicTexts.push(this.scene.add.text(this.x, cursorY, 'Collectibles', { fontFamily: 'LTHoop', fontSize: '16px', fontStyle: 'bold', color: '#e9e9ef' }).setOrigin(0, 0));
+      cursorY += 18;
       for (const id of relicIds.sort((a, b) => (relicLabelById[a] || a).localeCompare(relicLabelById[b] || b))) {
         const n = ownedRelics[id] ?? 0;
         const countSuffix = n > 1 ? ` ×${n}` : '';
-        const txt = this.scene.add.text(this.x + 12, cursorY, `${relicLabelById[id] ?? id}${countSuffix}`, { fontFamily: 'monospace', fontSize: '14px', color: '#e9e9ef' }).setOrigin(0, 0);
+        const txt = this.scene.add.text(this.x + 12, cursorY, `${relicLabelById[id] ?? id}${countSuffix}`, { fontFamily: 'LTHoop', fontSize: '14px', color: '#e9e9ef' }).setOrigin(0, 0).setDepth(20);
         txt.setInteractive({ useHandCursor: true });
-        const desc = (RELIC_DESCRIPTIONS as any)[id] ?? (EXTRA_RELIC_DESCRIPTIONS as any)[id] ?? '';
-        txt.on('pointerover', () => this.tooltipText.setText(desc));
-        txt.on('pointerout', () => this.tooltipText.setText(''));
+        const desc = (RELIC_UI_TEXT as any)[id] ?? (RELIC_DESCRIPTIONS as any)[id] ?? (EXTRA_RELIC_DESCRIPTIONS as any)[id] ?? '';
+        txt.on('pointerover', () => {
+          const name = relicLabelById[id] ?? id;
+          if (this.hoverProxy) this.hoverProxy(name, '#7dd3fc', desc);
+          else this.showTooltip(name, '#7dd3fc', desc);
+        });
+        txt.on('pointerout', () => {
+          if (this.clearHoverProxy) this.clearHoverProxy();
+          else this.clearTooltip();
+        });
         this.relicTexts.push(txt);
+        // DOM fallback region so hover works even if Phaser input misses
+        const name = relicLabelById[id] ?? id;
+        const over = () => {
+          if (this.hoverProxy) this.hoverProxy(name, '#7dd3fc', desc);
+          else this.showTooltip(name, '#7dd3fc', desc);
+        };
+        const out = () => {
+          if (this.clearHoverProxy) this.clearHoverProxy();
+          else this.clearTooltip();
+        };
+        // Use a generous width inside the card, same row height as others
+        const fullW = Math.max(220, (Math.min(360, this.scene.scale.width - Math.max(12, this.x - 12) - 12)) - 20);
+        this.domRegions.push({ x: this.x + 10, y: cursorY, w: fullW, h: 16, over, out });
         cursorY += 16;
       }
     }
     // Record bottom of content (for positioning other panels)
     this.contentBottomY = cursorY;
     // Tooltip anchored near bottom of the side column (like shop), not affecting layout
+    if (!this.hoverProxy) {
     const tooltipTop = Math.max(this.y, this.scene.scale.height - 110);
-    this.tooltipText.setPosition(this.x, tooltipTop);
+      this.tooltipNameText.setPosition(this.x, tooltipTop);
+      this.tooltipDescText.setPosition(this.x, tooltipTop);
+    }
+  }
+
+  // DOM fallback hover routing from GameScene
+  domRouteMove(x: number, y: number): boolean {
+    for (let i = 0; i < this.domRegions.length; i++) {
+      const r = this.domRegions[i];
+      if (x >= r.x && y >= r.y && x <= r.x + r.w && y <= r.y + r.h) {
+        if (this.domLastIdx !== i) {
+          if (this.domLastIdx >= 0) this.domRegions[this.domLastIdx].out();
+          this.domLastIdx = i;
+          r.over();
+        }
+        return true;
+      }
+    }
+    if (this.domLastIdx >= 0) {
+      this.domRegions[this.domLastIdx].out();
+      this.domLastIdx = -1;
+    }
+    return false;
+  }
+
+  domRouteDown(x: number, y: number): boolean {
+    // We don't have clicks to process here; just consume if inside to prevent board routing
+    return this.domRegions.some(r => x >= r.x && y >= r.y && x <= r.x + r.w && y <= r.y + r.h);
   }
 
   getBottomY(): number {
     return this.contentBottomY;
+  }
+
+  // Public API: flash a manifest row when a tile procs
+  flashRow(kind: 'shop' | 'challenge', id: string) {
+    const row = kind === 'shop' ? this.shopRowById[id] : this.challengeRowById[id];
+    if (!row) return;
+    this.scene.tweens.add({
+      targets: row,
+      alpha: { from: 1, to: 0.15 },
+      yoyo: true,
+      repeat: 3,
+      duration: 90
+    });
+  }
+
+  // Public API: float a delta near lives/coins
+  floatDelta(kind: 'lives' | 'coins', delta: number) {
+    const ref = kind === 'lives' ? this.livesNum : this.coinsNum;
+    if (!ref || delta === 0) return;
+    const txt = this.scene.add.text(ref.x + ref.width + 8, ref.y, (delta > 0 ? `+${delta}` : `${delta}`), {
+      fontFamily: 'LTHoop',
+      fontSize: '14px',
+      color: delta > 0 ? '#9ae6b4' : '#fca5a5'
+    }).setOrigin(0, 0.5).setDepth(30);
+    this.scene.tweens.add({
+      targets: txt,
+      alpha: { from: 1, to: 0 },
+      y: txt.y - 12,
+      duration: 700,
+      onComplete: () => txt.destroy()
+    });
+  }
+
+  private clearTooltip() {
+    this.tooltipNameText.setText('');
+    this.tooltipDescText.setText('');
+  }
+
+  private showTooltip(name: string, nameColor: string, desc: string) {
+    // Ensure a space after a leading emoji without breaking surrogate pairs
+    if (name && name.length > 0) {
+      const cp = name.codePointAt(0);
+      if (cp !== undefined) {
+        const firstLen = cp > 0xffff ? 2 : 1;
+        const firstChar = String.fromCodePoint(cp);
+        const looksEmoji = /\p{Emoji}/u.test(firstChar);
+        const hasSpace = name[firstLen] === ' ';
+        if (looksEmoji && !hasSpace) {
+          name = firstChar + ' ' + name.slice(firstLen);
+        }
+      }
+    }
+    if (!name || name.trim() === '') {
+      this.tooltipNameText.setText('');
+      this.tooltipDescText.setText(desc);
+      this.tooltipDescText.setX(this.tooltipNameText.x);
+      this.tooltipDescText.setY(this.tooltipNameText.y);
+    } else {
+      this.tooltipNameText.setColor(nameColor);
+      this.tooltipNameText.setText(`${name}:`);
+      // Place description just after the colored name
+      this.tooltipDescText.setText(' ' + desc);
+      this.tooltipDescText.setX(this.tooltipNameText.x + this.tooltipNameText.width + 6);
+      this.tooltipDescText.setY(this.tooltipNameText.y);
+    }
   }
 }
 

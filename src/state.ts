@@ -7,6 +7,7 @@ export interface RunState {
   level: number;
   lives: number;
   gold: number;
+  flagColor: 'white' | 'yellow' | 'blue';
   shopFreePurchases: number;
   ownedShopTiles: Record<OwnedShopTileId, number>;
   ownedRelics: Record<OwnedRelicId, number>;
@@ -20,6 +21,7 @@ export interface RunState {
     scratchcardStacks: number;
     optimistUsedThisLevel: boolean;
     pokerChipUsedThisLevel: boolean;
+    tarotCard: boolean;
   };
   stats: {
     revealedCount: number;
@@ -41,6 +43,7 @@ export const runState: RunState = {
   level: 1,
   lives: 3,
   gold: 0,
+  flagColor: 'white',
   shopFreePurchases: 0,
   ownedShopTiles: {},
   ownedRelics: {},
@@ -53,7 +56,8 @@ export const runState: RunState = {
     stopwatchCount: 0,
     scratchcardStacks: 0,
     optimistUsedThisLevel: false,
-    pokerChipUsedThisLevel: false
+    pokerChipUsedThisLevel: false,
+    tarotCard: false
   },
   stats: {
     revealedCount: 0,

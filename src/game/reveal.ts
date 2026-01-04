@@ -1,8 +1,9 @@
 // Reveal engine:
 //  - Mutates the underlying board model (no Phaser objects here)
 //  - Emits GameEvent notifications for the Scene to react (UI, scene changes)
-//  - Applies challenge/relic rules and keeps runState counters in sync
+//  - Applies challenge/collectible rules and keeps runState counters in sync
 //  - Returns a compact RevealResult so callers can handle follow‑up flows (e.g. ❌ resolution)
+// Legacy note: if you see "Zirconium" in older comments/events, it refers to "Quartz".
 import { Board, Tile, TileKind, ChallengeId, indexAt, neighbors } from './types';
 import { runState } from '../state';
 import { rngInt } from './rng';
@@ -48,14 +49,22 @@ export function revealTile(board: Board, x: number, y: number, byUser: boolean =
   // Car Loan fee for special tiles (shop/challenge) only; never below 0
   if (runState.persistentEffects.carLoan) {
     if (tile.kind === TileKind.Shop || tile.kind === TileKind.Challenge) {
+      let loss = 1;
       runState.gold -= 1; // can go negative per new rule
       res.goldDelta -= 1;
+      if ((runState.persistentEffects as any).atmFee) {
+        runState.gold -= 1;
+        res.goldDelta -= 1;
+        loss += 1;
+      }
+      // Emit as a negative coin delta (respects ATM Fee)
+      events.emit(GameEvent.GoldGained, { amount: -loss, source: 'CarLoan' } as any);
     }
   }
 
   switch (tile.kind) {
     case TileKind.Mine: {
-      // Optimist: first mine each level becomes Zirconium (no life lost) but still counts as mine opened
+      // Optimist: first mine each level becomes Quartz (no life lost) but still counts as mine opened
       if (!runState.persistentEffects.optimistUsedThisLevel && (runState.ownedRelics['Optimist'] ?? 0) > 0) {
         runState.persistentEffects.optimistUsedThisLevel = true;
         tile.revealed = true;
@@ -67,14 +76,14 @@ export function revealTile(board: Board, x: number, y: number, byUser: boolean =
           res.goldDelta += 3 * lap;
           events.emit(GameEvent.GoldGained, { amount: 3 * lap, source: 'Lapidarist' });
         }
-        // Zirconium +1g
+        // Quartz +1g
         runState.gold += 1;
         res.goldDelta += 1;
-        events.emit(GameEvent.GoldGained, { amount: 1, source: 'OptimistZirconium' });
+        events.emit(GameEvent.GoldGained, { amount: 1, source: 'OptimistQuartz' });
         events.emit(GameEvent.TileRevealed, { tile });
         break;
       }
-      // Gambler relic 25% to not explode per stack
+      // Gambler collectible 25% to not explode per stack
       const stacks = runState.ownedRelics['Gambler'] ?? 0;
       let prevented = false;
       for (let i = 0; i < stacks; i++) {
@@ -125,14 +134,18 @@ export function revealTile(board: Board, x: number, y: number, byUser: boolean =
         res.goldDelta += gain;
         events.emit(GameEvent.GoldGained, { amount: gain, source: investor ? 'InvestorDiamond' : 'Ore' });
       }
-      // Snake Venom (v2): revealing Ore-like tiles costs 1 life (cannot kill)
-      if (runState.persistentEffects.snakeVenom.active && runState.lives > 1) {
-        const canBillionaire = (runState.ownedRelics['Billionaire'] ?? 0) > 0 && runState.gold >= 5;
-        if (canBillionaire) {
+      // Blood Diamond: lose 1 life in addition to gold on ⚪/🪙/💎
+      if ((runState.persistentEffects as any).bloodDiamond) {
+        const canBillionaire2 = (runState.ownedRelics['Billionaire'] ?? 0) > 0 && runState.lives > 1 && runState.gold >= 5;
+        if (canBillionaire2) {
           runState.gold -= 5;
           res.goldDelta -= 5;
+          if ((runState.persistentEffects as any).atmFee) {
+            runState.gold -= 1;
+            res.goldDelta -= 1;
+          }
         } else {
-          runState.lives = Math.max(1, runState.lives - 1);
+          runState.lives = Math.max(0, runState.lives - 1);
           res.lifeDelta -= 1;
         }
       }
@@ -203,6 +216,42 @@ export function revealTile(board: Board, x: number, y: number, byUser: boolean =
           events.emit(GameEvent.GoldGained, { amount: stacksNC, source: 'NumberCruncher' });
         }
       }
+      // Snake Venom (new): 25% chance to lose a life on 3+
+      if (runState.persistentEffects.snakeVenom.active && tile.number >= 3) {
+        if (Math.random() < 0.25) {
+          const canBill = (runState.ownedRelics['Billionaire'] ?? 0) > 0 && runState.lives > 1 && runState.gold >= 5;
+          if (canBill) {
+            runState.gold -= 5;
+            res.goldDelta -= 5;
+            if ((runState.persistentEffects as any).atmFee) {
+              runState.gold -= 1;
+              res.goldDelta -= 1;
+            }
+          } else {
+            runState.lives = Math.max(0, runState.lives - 1);
+            res.lifeDelta -= 1;
+          }
+        }
+      }
+      // Math Test masking should not be retroactive: only numbers revealed AFTER Math Test are masked
+      if (runState.persistentEffects.mathTest && tile.number > 1) {
+        (tile as any).mathMasked = true;
+      }
+      // Tarot Card: if Math Test is active and this number would show '?', 5% chance to grant currency
+      if (runState.persistentEffects.mathTest && runState.persistentEffects.tarotCard && tile.number > 1) {
+        if (Math.random() < 0.05) {
+          const pick = Math.floor(Math.random() * 3); // 0: Quartz, 1: Ore, 2: Diamond
+          let gain = 0;
+          if (pick === 0) gain = 1;
+          else if (pick === 1) gain = rngInt(Math.random, 2, 5);
+          else gain = rngInt(Math.random, 7, 10);
+          if (!runState.persistentEffects.snakeOil || pick === 0) {
+            runState.gold += gain;
+            res.goldDelta += gain;
+            events.emit(GameEvent.GoldGained, { amount: gain, source: pick === 0 ? 'TarotQuartz' : pick === 1 ? 'TarotOre' : 'TarotDiamond' });
+          }
+        }
+      }
       events.emit(GameEvent.TileRevealed, { tile });
       break;
     }
@@ -216,14 +265,26 @@ export function revealTile(board: Board, x: number, y: number, byUser: boolean =
     events.emit(GameEvent.LevelEndResolved, { survived: false, goldAwarded: 0 });
   }
 
+  // Emit life change summary for this reveal (positive or negative)
+  if (res.lifeDelta !== 0) {
+    events.emit(GameEvent.LifeChanged, { delta: res.lifeDelta } as any);
+  }
+
   return res;
 }
 
 function applyChallengeOnReveal(tile: Tile, res: RevealResult) {
   switch (tile.subId) {
     case ChallengeId.AutoGrat: {
+      let loss = 1;
       runState.gold -= 1; // steals 1 gold; can go negative
       res.goldDelta -= 1;
+      if ((runState.persistentEffects as any).atmFee) {
+        runState.gold -= 1;
+        res.goldDelta -= 1;
+        loss += 1;
+      }
+      events.emit(GameEvent.GoldGained, { amount: -loss, source: 'AutoGrat' } as any);
       break;
     }
     case ChallengeId.Stopwatch: {
@@ -253,6 +314,37 @@ function applyChallengeOnReveal(tile: Tile, res: RevealResult) {
     }
     case ChallengeId.SnakeOil: {
       runState.persistentEffects.snakeOil = true;
+      break;
+    }
+    case ChallengeId.BloodDiamond: {
+      (runState.persistentEffects as any).bloodDiamond = true;
+      break;
+    }
+    case ChallengeId.FindersFee: {
+      (runState.persistentEffects as any).noEndGold = true;
+      break;
+    }
+    case ChallengeId.ATMFee: {
+      (runState.persistentEffects as any).atmFee = true;
+      break;
+    }
+    case ChallengeId.Coal: {
+      // no effect
+      break;
+    }
+    case ChallengeId.BoxingDay: {
+      const before = runState.gold;
+      const after = Math.floor(before / 2);
+      const delta = after - before; // negative or zero
+      if (delta !== 0) {
+        runState.gold = after;
+        res.goldDelta += delta;
+      }
+      // ATM fee triggers on any gold loss
+      if ((runState.persistentEffects as any).atmFee && before > after) {
+        runState.gold -= 1;
+        res.goldDelta -= 1;
+      }
       break;
     }
     case ChallengeId.MegaMine: {
@@ -293,6 +385,13 @@ function applyChallengeOnReveal(tile: Tile, res: RevealResult) {
       break;
     }
   }
+  // Auditor: each challenge tile revealed grants +1 gold per stack
+  const auditorStacks = runState.ownedRelics['Auditor'] ?? 0;
+  if (auditorStacks > 0) {
+    runState.gold += auditorStacks;
+    res.goldDelta += auditorStacks;
+    events.emit(GameEvent.GoldGained, { amount: auditorStacks, source: 'Auditor' } as any);
+  }
 }
 
 function applyShopTileOnReveal(tile: Tile, res: RevealResult) {
@@ -304,14 +403,17 @@ function applyShopTileOnReveal(tile: Tile, res: RevealResult) {
         res.goldDelta += gain;
         events.emit(GameEvent.GoldGained, { amount: gain, source: 'Diamond' });
       }
-      // Snake Venom penalty on Diamond reveal (cannot kill)
-      if (runState.persistentEffects.snakeVenom.active && runState.lives > 1) {
-        const canBillionaire = (runState.ownedRelics['Billionaire'] ?? 0) > 0 && runState.gold >= 5;
-        if (canBillionaire) {
+      // Blood Diamond: +1 life loss
+      if ((runState.persistentEffects as any).bloodDiamond) {
+        const canB = (runState.ownedRelics['Billionaire'] ?? 0) > 0 && runState.lives > 1 && runState.gold >= 5;
+        if (canB) {
           runState.gold -= 5;
           res.goldDelta -= 5;
+          if ((runState.persistentEffects as any).atmFee) {
+            runState.gold -= 1; res.goldDelta -= 1;
+          }
         } else {
-          runState.lives = Math.max(1, runState.lives - 1);
+          runState.lives = Math.max(0, runState.lives - 1);
           res.lifeDelta -= 1;
         }
       }
@@ -323,17 +425,21 @@ function applyShopTileOnReveal(tile: Tile, res: RevealResult) {
       break;
     }
     case 'Pickaxe': {
-      // Reveal up to 2 adjacent non-mine tiles
+      // Reveal up to 2 random adjacent non-mine, unrevealed tiles
       if (thisBoard) {
         const { x, y } = tile.pos;
-        const neighs = neighbors(thisBoard, x, y)
-          .filter(p => {
-            const t = thisBoard!.tiles[indexAt(thisBoard!, p.x, p.y)];
-            return !t.revealed && t.kind !== TileKind.Mine;
-          });
-        for (let i = 0; i < Math.min(2, neighs.length); i++) {
-          const p = neighs[i];
-          revealTile(thisBoard, p.x, p.y); // chain reveal
+        const candidates = neighbors(thisBoard, x, y).filter(p => {
+          const t = thisBoard!.tiles[indexAt(thisBoard!, p.x, p.y)];
+          return !t.revealed && t.kind !== TileKind.Mine;
+        });
+        // Shuffle deterministically enough for gameplay using Math.random
+        for (let i = candidates.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1));
+          [candidates[i], candidates[j]] = [candidates[j], candidates[i]];
+        }
+        const toOpen = candidates.slice(0, 2);
+        for (const p of toOpen) {
+          revealTile(thisBoard, p.x, p.y, false);
         }
       }
       break;
@@ -346,6 +452,10 @@ function applyShopTileOnReveal(tile: Tile, res: RevealResult) {
       if (runState.gold > 0) {
         runState.gold -= 1;
         res.goldDelta -= 1;
+        if ((runState.persistentEffects as any).atmFee) {
+          runState.gold -= 1;
+          res.goldDelta -= 1;
+        }
         runState.lives += 1;
         res.lifeDelta += 1;
       }
@@ -398,28 +508,61 @@ function applyShopTileOnReveal(tile: Tile, res: RevealResult) {
       runState.shopFreePurchases += 1;
       break;
     }
-    case 'Zirconium': {
+    case 'TarotCard': {
+      // Enable Tarot effect for this level
+      runState.persistentEffects.tarotCard = true;
+      break;
+    }
+    case 'MetalDetector': {
+      // Flag all adjacent mines (or clovers) without revealing
+      if (thisBoard) {
+        const { x, y } = tile.pos;
+        for (const p of neighbors(thisBoard, x, y)) {
+          const tt = thisBoard.tiles[indexAt(thisBoard, p.x, p.y)];
+          if (!tt.flagged && !tt.revealed && (tt.kind === TileKind.Mine || (tt.kind === TileKind.Challenge && tt.subId === ChallengeId.Clover2))) {
+            tt.flagged = true;
+            if (tt.kind === TileKind.Mine) {
+              runState.stats.minesTotal = Math.max(0, runState.stats.minesTotal - 1);
+            }
+          }
+        }
+      }
+      break;
+    }
+    case 'LaundryMoney': {
+      const before = runState.gold;
+      const after = Math.ceil(before / 5) * 5;
+      const delta = after - before;
+      if (delta !== 0) {
+        runState.gold = after;
+        res.goldDelta += delta;
+        if (delta > 0) {
+          events.emit(GameEvent.GoldGained, { amount: delta, source: 'LaundryMoney' });
+        }
+      }
+      break;
+    }
+    case 'Quartz': {
       // Investor chance to upgrade to Diamond
       const investor = (runState.ownedRelics['Investor'] ?? 0) > 0 && Math.random() < 0.25;
       const amount = investor ? rngInt(Math.random, 7, 10) : 1;
-      if (!runState.persistentEffects.snakeOil || !investor) {
+      if (!runState.persistentEffects.snakeOil) {
         runState.gold += amount;
         res.goldDelta += amount;
-        events.emit(GameEvent.GoldGained, { amount, source: investor ? 'InvestorDiamond' : 'Zirconium' });
+        events.emit(GameEvent.GoldGained, { amount, source: investor ? 'InvestorDiamond' : 'Quartz' });
       }
       // Show 💎 if upgraded
       if (investor) {
         tile.subId = 'Diamond';
       }
-      // Snake Venom penalty on Zirconium reveal (cannot kill)
-      if (runState.persistentEffects.snakeVenom.active && runState.lives > 1) {
-        const canBillionaire = (runState.ownedRelics['Billionaire'] ?? 0) > 0 && runState.gold >= 5;
-        if (canBillionaire) {
-          runState.gold -= 5;
-          res.goldDelta -= 5;
+      // Blood Diamond: +1 life loss
+      if ((runState.persistentEffects as any).bloodDiamond) {
+        const canB2 = (runState.ownedRelics['Billionaire'] ?? 0) > 0 && runState.lives > 1 && runState.gold >= 5;
+        if (canB2) {
+          runState.gold -= 5; res.goldDelta -= 5;
+          if ((runState.persistentEffects as any).atmFee) { runState.gold -= 1; res.goldDelta -= 1; }
         } else {
-          runState.lives = Math.max(1, runState.lives - 1);
-          res.lifeDelta -= 1;
+          runState.lives = Math.max(0, runState.lives - 1); res.lifeDelta -= 1;
         }
       }
       break;

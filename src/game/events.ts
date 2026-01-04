@@ -6,6 +6,7 @@ export enum GameEvent {
   LevelStart = 'onLevelStart',
   TileRevealed = 'onTileRevealed',
   GoldGained = 'onGoldGained',
+  LifeChanged = 'onLifeChanged',
   LevelEndTriggered = 'onLevelEndTriggered',
   LevelEndResolved = 'onLevelEndResolved'
 }
