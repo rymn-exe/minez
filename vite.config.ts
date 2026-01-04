@@ -1,6 +1,6 @@
 import { defineConfig } from 'vite';
 
 export default defineConfig({
-  base: '/Minez/',
+  base: '/minez/',
   server: { open: true }
 });
