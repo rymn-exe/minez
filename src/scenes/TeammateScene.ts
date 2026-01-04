@@ -88,7 +88,7 @@ export default class TeammateScene extends Phaser.Scene {
         ease: 'Sine.easeIn',
         onComplete: () => {
           // Reveal the front content at the midpoint
-          revealObjs.forEach(o => o.setVisible(true));
+          revealObjs.forEach(o => (o as any).setVisible?.(true));
           // Second half: expand card + content together
           this.tweens.add({
             targets: [containerObj],
@@ -149,7 +149,7 @@ export default class TeammateScene extends Phaser.Scene {
       const pillH = 28;
       const pillY = -pcH / 2 + 66 + 58 + 8;
       const pillBg = this.add.rectangle(-pillW / 2, pillY, pillW, pillH, 0x1f2430).setOrigin(0, 0).setStrokeStyle(1, rarityColor(rar));
-      pillBg.setRadius?.(pillH / 2 as any);
+      (pillBg as any).setRadius?.(pillH / 2);
       const pillText = this.add.text(0, pillY, rar, {
         fontFamily: 'LTHoop',
         fontSize: '13px',

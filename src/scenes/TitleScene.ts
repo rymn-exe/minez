@@ -95,7 +95,8 @@ export default class TitleScene extends Phaser.Scene {
         stopwatchCount: 0,
         scratchcardStacks: 0,
         optimistUsedThisLevel: false,
-        pokerChipUsedThisLevel: false
+        pokerChipUsedThisLevel: false,
+        tarotCard: false
       };
       runState.stats = {
         revealedCount: 0,
