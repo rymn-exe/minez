@@ -7,6 +7,7 @@ export enum GameEvent {
   TileRevealed = 'onTileRevealed',
   GoldGained = 'onGoldGained',
   LifeChanged = 'onLifeChanged',
+  BoardChanged = 'onBoardChanged',
   LevelEndTriggered = 'onLevelEndTriggered',
   LevelEndResolved = 'onLevelEndResolved'
 }
@@ -23,6 +24,10 @@ export interface GoldGainedPayload {
 
 export interface LifeChangedPayload {
   delta: number;
+}
+
+export interface BoardChangedPayload {
+  reason: string;
 }
 
 export interface LevelEndResolvedPayload {

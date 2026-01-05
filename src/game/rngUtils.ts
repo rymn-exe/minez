@@ -28,8 +28,10 @@ export function getLevelRng(): () => number {
  * Use this for shop offer selection and shop-specific randomness
  */
 export function getShopRng(): () => number {
-  // Use level as shop session identifier (each level has one shop)
-  return createRng(runState.seed + runState.level + 50000);
+  // Use level as shop session identifier (each level has one shop) plus reroll counter
+  // so rerolls actually change offers deterministically.
+  const rerolls = runState.persistentEffects.shopRerollCount ?? 0;
+  return createRng(runState.seed + runState.level + 50000 + rerolls * 9973);
 }
 
 /**

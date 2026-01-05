@@ -2,13 +2,14 @@
 // Extracted from GameScene to reduce file size and improve maintainability
 import Phaser from 'phaser';
 import { Board, TileKind, indexAt, neighbors, ChallengeId } from '../../game/types';
-import { GRID_SIZE } from '../../game/consts';
 import { FLAG_COLOR_HEX } from '../gameplay/FlagPaintMode';
 
 const TILE_NORMAL = 0x2a2a34;
 
 export class TileRenderer {
   private iconImages: Map<number, Phaser.GameObjects.Image> = new Map();
+  private numberFontPx: number;
+  private emojiFontPx: number;
 
   constructor(
     private scene: Phaser.Scene,
@@ -16,13 +17,24 @@ export class TileRenderer {
     private tiles: Phaser.GameObjects.Rectangle[][],
     private numbers: Phaser.GameObjects.Text[][],
     private boardCell: number
-  ) {}
+  ) {
+    // Scale label fonts with tile size.
+    // - numbers/? should be readable but not touch borders
+    // - emojis/icons can be a bit larger
+    this.numberFontPx = Math.max(12, Math.min(40, Math.floor(this.boardCell * 0.55)));
+    this.emojiFontPx = Math.max(14, Math.min(56, Math.floor(this.boardCell * 0.65)));
+  }
 
   renderTile(x: number, y: number): void {
     const idx = indexAt(this.board, x, y);
     const t = this.board.tiles[idx];
     const rect = this.tiles[y][x];
     const label = this.numbers[y][x];
+    const setFontPx = (px: number) => {
+      // Phaser Text supports setFontSize in recent versions; fall back to setStyle.
+      (label as any).setFontSize?.(px);
+      label.setStyle?.({ fontSize: `${px}px` } as any);
+    };
     
     // Helper to clear any icon image at this tile
     const clearIcon = () => {
@@ -36,6 +48,7 @@ export class TileRenderer {
     if (!t.revealed) {
       // Original solid fill for unrevealed tiles
       rect.setFillStyle(TILE_NORMAL, 1);
+      setFontPx(this.numberFontPx);
       if (t.flagged) {
         label.setText('⚑');
         const stored = t.flagColor;
@@ -53,29 +66,35 @@ export class TileRenderer {
     const revealedAlpha = 0.6;
     if (t.kind === TileKind.Mine) {
       rect.setFillStyle(0x1f2430, revealedAlpha);
+      setFontPx(this.emojiFontPx);
       label.setText('💣');
       clearIcon();
     } else if (t.kind === TileKind.X) {
       rect.setFillStyle(0x1e7b4a, revealedAlpha);
+      setFontPx(this.emojiFontPx);
       label.setText('❌');
       clearIcon();
     } else if (t.kind === TileKind.Ore) {
       rect.setFillStyle(0x1f2430, revealedAlpha);
       // Emoji-only rendering for ore and upgrades
+      setFontPx(this.emojiFontPx);
         label.setText(t.subId === 'Diamond' ? '💎' : '🪙');
       clearIcon();
     } else if (t.kind === TileKind.Shop) {
       rect.setFillStyle(0x1f2430, revealedAlpha);
       // Emoji-only rendering for shop tiles
+      setFontPx(this.emojiFontPx);
       label.setText(this.shopIcon(t.subId, t.compassDir));
       clearIcon();
     } else if (t.kind === TileKind.Challenge) {
       rect.setFillStyle(0x1f2430, revealedAlpha);
       // Emoji-only rendering for challenges
+      setFontPx(this.emojiFontPx);
       label.setText(this.challengeIcon(t.subId));
       clearIcon();
     } else if (t.kind === TileKind.Safe) {
       rect.setFillStyle(0x1f2430, revealedAlpha);
+      setFontPx(this.numberFontPx);
       // Persistent frontier masking:
       // If a revealed 0-tile ever borders an unrevealed neighbor, mark it to always display '?'
       if (t.number === 0) {
@@ -93,8 +112,12 @@ export class TileRenderer {
       clearIcon();
     } else if (t.kind === TileKind.Number) {
       rect.setFillStyle(0x1f2430, revealedAlpha);
+      setFontPx(this.numberFontPx);
       const masked = t.mathMasked || t.randomMasked;
-      if (masked) {
+      // If a transform is pending, keep showing the original (usually '?') until the animation completes.
+      if (t.pendingTransform) {
+        label.setText(masked ? '?' : String(t.number));
+      } else if (masked) {
         label.setText('?');
       } else {
         label.setText(String(t.number));
@@ -104,8 +127,8 @@ export class TileRenderer {
   }
 
   renderAll(): void {
-    for (let y = 0; y < GRID_SIZE; y++) {
-      for (let x = 0; x < GRID_SIZE; x++) {
+    for (let y = 0; y < this.board.height; y++) {
+      for (let x = 0; x < this.board.width; x++) {
         this.renderTile(x, y);
       }
     }
@@ -160,6 +183,10 @@ export class TileRenderer {
       case 'TarotCard': return '🪬';
       case 'MetalDetector': return '🔎';
       case 'LaundryMoney': return '🧼';
+      case 'CheatSheet': return '📄';
+      case 'PokerChip': return '🃏';
+      case 'LuckyPenny': return '🧧';
+      case 'NineToFive': return '🏢';
       default: return '🟣';
     }
   }

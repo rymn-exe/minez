@@ -2,7 +2,7 @@
 // Extracted from GameScene to reduce file size and improve maintainability
 import Phaser from 'phaser';
 import { Board, TileKind, indexAt, neighbors, ChallengeId } from '../../game/types';
-import { GRID_SIZE, PADDING, ECONOMY } from '../../game/consts';
+import { PADDING, ECONOMY } from '../../game/consts';
 import { runState } from '../../state';
 import { revealTile } from '../../game/reveal';
 import { events, GameEvent } from '../../game/events';
@@ -32,7 +32,6 @@ export class InputHandler {
     private tileRenderer: TileRenderer,
     private levelResolver: LevelResolver,
     private manifest: ManifestWithExtensions,
-    private effectsPanel: { setTop: (y: number) => void; refresh?: () => void },
     private resolvingEnd: { current: boolean }
   ) {
     this.setupClickTracking();
@@ -41,7 +40,7 @@ export class InputHandler {
   }
 
   private setupClickTracking(): void {
-    for (let y = 0; y < GRID_SIZE; y++) {
+    for (let y = 0; y < this.board.height; y++) {
       this.clickTimes[y] = [];
       this.pressedLeft[y] = [];
     }
@@ -86,12 +85,13 @@ export class InputHandler {
       const y = pointer.y;
       const BOARD_LEFT = PADDING;
       const BOARD_TOP = PADDING;
-      const boardW = GRID_SIZE * this.boardCell;
-      const boardH = GRID_SIZE * this.boardCell;
+      const boardW = this.board.width * this.boardCell;
+      const boardH = this.board.height * this.boardCell;
       if (x < BOARD_LEFT || y < BOARD_TOP || x >= BOARD_LEFT + boardW || y >= BOARD_TOP + boardH) return;
       // Prefer the tile currently in hover state for precision on borders
       const gx = (this.domHoverGX !== -1) ? this.domHoverGX : Math.floor((x - BOARD_LEFT) / this.boardCell);
       const gy = (this.domHoverGY !== -1) ? this.domHoverGY : Math.floor((y - BOARD_TOP) / this.boardCell);
+      if (gx < 0 || gy < 0 || gx >= this.board.width || gy >= this.board.height) return;
       // Avoid triggering reveal on pointerup for this tile
       (this.pressedLeft[gy] ||= [])[gx] = false;
       this.toggleFlag(gx, gy);
@@ -211,14 +211,10 @@ export class InputHandler {
       }
       revealTile(this.board, x, y, false); // reveal only
       this.manifest.refresh();
-      this.effectsPanel.setTop(this.manifest.getBottomY() + 12);
-      this.effectsPanel.refresh?.();
       return;
     }
     const res = revealTile(this.board, x, y, true);
     this.manifest.refresh();
-    this.effectsPanel.setTop(this.manifest.getBottomY() + 12);
-    this.effectsPanel.refresh?.();
     // If X is clicked when already revealed, proceed the level (stopwatches disabled).
     if (wasX) {
       // Key gate: must reveal all keys before exiting.
@@ -249,12 +245,24 @@ export class InputHandler {
       }
 
       // Stopwatch penalty: lose 1 life per unrevealed stopwatch when exiting.
-      const stopwatchesLeft = this.board.tiles.filter(t =>
+      const stopwatches = this.board.tiles.filter(t =>
         t.kind === TileKind.Challenge &&
         t.subId === ChallengeId.Stopwatch &&
         !t.revealed
-      ).length;
+      );
+      const stopwatchesLeft = stopwatches.length;
       let toLose = stopwatchesLeft;
+
+      // If there are unrevealed stopwatches, reveal them now, then animate to an explosion icon.
+      // This reuses the existing "flash twice then swap" behavior in GameScene for `pendingTransform`.
+      if (stopwatchesLeft > 0) {
+        for (const sw of stopwatches) {
+          // Mark transform BEFORE revealing so the TileRevealed listener can animate it.
+          sw.pendingTransform = 'MegaMine';
+          revealTile(this.board, sw.pos.x, sw.pos.y, false);
+        }
+        this.manifest.refresh();
+      }
       const finalize = () => {
         const survived = runState.lives > 0;
         if (survived) {
@@ -287,12 +295,21 @@ export class InputHandler {
         }
         if (runState.lives > 0) {
           runState.lives = Math.max(0, runState.lives - 1);
+          events.emit(GameEvent.LifeChanged, { delta: -1 });
+          // 9-5 should also apply to stopwatch penalty life loss.
+          const stacks = runState.persistentEffects.nineToFiveStacks ?? 0;
+          if (stacks > 0) {
+            const gain = 2 * stacks;
+            runState.gold += gain;
+            events.emit(GameEvent.GoldGained, { amount: gain, source: 'NineToFive' });
+          }
           this.manifest.refresh();
         }
         this.scene.time.delayedCall(250, () => stepDown(remaining - 1));
       };
       if (toLose > 0) {
-        this.scene.time.delayedCall(200, () => stepDown(toLose));
+        // Let the stopwatch flip + flash-transform animation play before we start ticking lives down.
+        this.scene.time.delayedCall(520, () => stepDown(toLose));
       } else {
         finalize();
       }
@@ -325,8 +342,6 @@ export class InputHandler {
       }
     }
     this.manifest.refresh();
-    this.effectsPanel.setTop(this.manifest.getBottomY() + 12);
-    this.effectsPanel.refresh?.();
   }
 
   // Fallback route: translate DOM pointer to board action when Phaser input fails
@@ -349,13 +364,14 @@ export class InputHandler {
     // Board area bounds
     const BOARD_LEFT = PADDING;
     const BOARD_TOP = PADDING;
-    const boardW = GRID_SIZE * this.boardCell;
-    const boardH = GRID_SIZE * this.boardCell;
+    const boardW = this.board.width * this.boardCell;
+    const boardH = this.board.height * this.boardCell;
     if (x < BOARD_LEFT || y < BOARD_TOP || x >= BOARD_LEFT + boardW || y >= BOARD_TOP + boardH) {
       return;
     }
     const gx = Math.floor((x - BOARD_LEFT) / this.boardCell);
     const gy = Math.floor((y - BOARD_TOP) / this.boardCell);
+    if (gx < 0 || gy < 0 || gx >= this.board.width || gy >= this.board.height) return;
     // If paint mode or ctrl/right-click: toggle flag. Otherwise reveal.
     const isRight = ev.button === 2;
     const wantsFlag = this.flagPaintMode.isPaintMode() || ev.ctrlKey || ev.metaKey || isRight;
@@ -397,8 +413,8 @@ export class InputHandler {
     }
     const BOARD_LEFT = PADDING;
     const BOARD_TOP = PADDING;
-    const boardW = GRID_SIZE * this.boardCell;
-    const boardH = GRID_SIZE * this.boardCell;
+    const boardW = this.board.width * this.boardCell;
+    const boardH = this.board.height * this.boardCell;
     if (x < BOARD_LEFT || y < BOARD_TOP || x >= BOARD_LEFT + boardW || y >= BOARD_TOP + boardH) {
       if (this.domHoverGX !== -1 && this.domHoverGY !== -1) {
         this.hoverSystem.setTileHoverState(this.domHoverGX, this.domHoverGY, 'normal');
@@ -409,6 +425,7 @@ export class InputHandler {
     }
     const gx = Math.floor((x - BOARD_LEFT) / this.boardCell);
     const gy = Math.floor((y - BOARD_TOP) / this.boardCell);
+    if (gx < 0 || gy < 0 || gx >= this.board.width || gy >= this.board.height) return;
     if (gx === this.domHoverGX && gy === this.domHoverGY) return;
     // Reset previous tile hover
     if (this.domHoverGX !== -1 && this.domHoverGY !== -1) {

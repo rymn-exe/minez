@@ -5,7 +5,7 @@
 //    ❌ resolution sequence (auto‑reveal ⏱️ → life countdown → resolve)
 //  - Applies immediate collectible awards that depend on UI state (e.g. Cartographer on corners)
 import Phaser from 'phaser';
-import { GRID_SIZE, CELL, PADDING, PANEL_WIDTH, VIEW_WIDTH, VIEW_HEIGHT, ECONOMY } from '../game/consts';
+import { CELL, PADDING, PANEL_WIDTH, VIEW_WIDTH, VIEW_HEIGHT, ECONOMY, MAX_GRID_SIZE, BASE_BOARD_PX } from '../game/consts';
 // Font policy: use only two fonts across the app:
 //  - LTHoop for all UI/body text
 //  - GrapeSoda for primary titles
@@ -15,8 +15,7 @@ import { bindBoardForShopEffects, revealTile } from '../game/reveal';
 import { runState } from '../state';
 import { ManifestPanel } from '../ui/manifest';
 import { events, GameEvent, TileRevealedPayload, GoldGainedPayload, LifeChangedPayload, LevelEndResolvedPayload } from '../game/events';
-import { ActiveEffectsPanel } from '../ui/activeEffects';
-import { ManifestWithExtensions, ActiveEffectsPanelWithExtensions } from '../types/phaser-extensions';
+import { ManifestWithExtensions } from '../types/phaser-extensions';
 import { SHOP_TILES } from '../game/items';
 import { TILE_DESCRIPTIONS, CHALLENGE_DESCRIPTIONS, EXTRA_TILE_DESCRIPTIONS, TILE_UI_TEXT, CHALLENGE_UI_TEXT } from '../game/descriptions';
 import { HoverSystem } from './ui/HoverSystem';
@@ -39,7 +38,6 @@ export default class GameScene extends Phaser.Scene {
   private boardCell: number = CELL;
   private tileRenderer!: TileRenderer;
   private manifest!: ManifestPanel;
-  private effectsPanel!: ActiveEffectsPanel;
   private hoverNameText!: Phaser.GameObjects.Text;
   private hoverDescText!: Phaser.GameObjects.Text;
   private hoverSystem!: HoverSystem;
@@ -117,7 +115,8 @@ export default class GameScene extends Phaser.Scene {
     // Setup board (generate, bind, reset counters, activate relics)
     // Note: levelResolver will be created after manifest is initialized
     const tempResolver = { reset: () => {}, markCartographerAwarded: () => {} } as any;
-    this.board = BoardSetup.setupBoard(GRID_SIZE, GRID_SIZE, tempResolver);
+    const n = Math.min(MAX_GRID_SIZE, 4 + runState.level);
+    this.board = BoardSetup.setupBoard(n, n, tempResolver);
 
     // Bottom-aligned hover bar (aligned with Shop/Teammate screens)
     const margin = 24;
@@ -134,19 +133,20 @@ export default class GameScene extends Phaser.Scene {
       this.hoverDescText.setWordWrapWidth(0, false);
     }
 
-    // Grid (slightly smaller to leave room above the hover bar)
-    this.boardCell = 32; // local render size for game scene tiles
+    // Grid: keep the board occupying the same on-screen footprint as the old 16x16 layout,
+    // and scale the per-cell pixel size based on how many tiles there are.
+    // (Example: 5x5 => big cells; 20x20 => smaller cells)
+    this.boardCell = Math.max(18, Math.min(96, Math.floor(BASE_BOARD_PX / this.board.width)));
     const BOARD_LEFT = PADDING;
     const BOARD_TOP = PADDING;
     // Side panel aligned to actual board width (fix spacing)
-    const sideX = BOARD_LEFT + GRID_SIZE * this.boardCell + PADDING;
+    const sideX = BOARD_LEFT + this.board.width * this.boardCell + PADDING;
     this.sideX = sideX;
     // Align right panel top more closely with the board top while keeping header clearance
     this.manifest = new ManifestPanel(this, sideX, PADDING + 24, {
       hoverProxy: (name, color, desc) => this.hoverSystem.setHover(name, color, desc),
       clearHoverProxy: () => this.hoverSystem.clearHover()
     });
-    this.effectsPanel = new ActiveEffectsPanel(this, sideX, this.manifest.getBottomY() + 12);
     // Flag color picker (right panel) styled as a card
     {
       // Align card to the side panel like other cards
@@ -174,13 +174,9 @@ export default class GameScene extends Phaser.Scene {
 
     const layoutRightPanel = () => {
       try {
-        // Active effects always live just below the manifest
-        this.effectsPanel.setTop(this.manifest.getBottomY() + 12);
-        this.effectsPanel.refresh?.();
-        // Flag section should be below active effects, even if effects text grows
+        // Flag section should be below the manifest
         if (this.flagTitleText) {
-          const effectsBottom = (this.effectsPanel as any).getBottomY ? (this.effectsPanel as any).getBottomY() : (this.manifest.getBottomY() + 12);
-          this.flagTitleText.setY(effectsBottom + 12);
+          this.flagTitleText.setY(this.manifest.getBottomY() + 12);
           const topY = (this.flagTitleText.getBounds ? this.flagTitleText.getBounds().bottom : this.flagTitleText.y + 30) + 8;
           this.flagPaintMode.setupSwatches(this.sideX, topY, this.flagCardWidth);
           this.flagPaintMode.refresh();
@@ -199,10 +195,10 @@ export default class GameScene extends Phaser.Scene {
       } catch {}
     });
     // Create tile rectangles and labels
-    for (let y = 0; y < GRID_SIZE; y++) {
+    for (let y = 0; y < this.board.height; y++) {
       this.tiles[y] = [];
       this.numbers[y] = [];
-      for (let x = 0; x < GRID_SIZE; x++) {
+      for (let x = 0; x < this.board.width; x++) {
         const rx = BOARD_LEFT + x * this.boardCell + this.boardCell / 2;
         const ry = BOARD_TOP + y * this.boardCell + this.boardCell / 2;
 
@@ -243,12 +239,11 @@ export default class GameScene extends Phaser.Scene {
       this.tileRenderer,
       this.levelResolver,
       this.manifest,
-      this.effectsPanel,
       resolvingEndRef
     );
     // Setup tile handlers
-    for (let y = 0; y < GRID_SIZE; y++) {
-      for (let x = 0; x < GRID_SIZE; x++) {
+    for (let y = 0; y < this.board.height; y++) {
+      for (let x = 0; x < this.board.width; x++) {
         this.inputHandler.setupTileHandlers(x, y, this.tiles[y][x]);
       }
     }
@@ -261,6 +256,13 @@ export default class GameScene extends Phaser.Scene {
       this.resolvingEnd = true;
       resolvingEndRef.current = true;
       this.levelResolver.resolveLevel(survived);
+    }));
+
+    // BoardChanged: re-render after logic updates that don't reveal tiles (e.g., Poker Chip flags).
+    this.disposers.push(events.on(GameEvent.BoardChanged, () => {
+      this.tileRenderer.renderAll();
+      this.manifest.refresh();
+      layoutRightPanel();
     }));
 
     // Flip animation on any tile reveal
@@ -288,6 +290,32 @@ export default class GameScene extends Phaser.Scene {
             onComplete: () => {
               label.setText(useOptimist ? '⚪' : '💥');
               if (useOptimist) this.optimistShownThisLevel = true;
+            }
+          });
+        });
+      }
+
+      // Generic transform animation: flash twice, then swap the icon/state.
+      // Used for Tarot/LuckyPenny masked numbers and Investor upgrades.
+      if (tile.pendingTransform) {
+        this.time.delayedCall(190, () => {
+          const label = this.numbers[y][x];
+          if (!label) return;
+          this.tweens.add({
+            targets: label,
+            alpha: { from: 1, to: 0.2 },
+            yoyo: true,
+            repeat: 1,
+            duration: 120,
+            onComplete: () => {
+              // Apply the transform to the tile model and re-render (ensures correct font sizing)
+              const to = tile.pendingTransform!;
+              tile.subId = to;
+              tile.pendingTransform = undefined;
+              // If we were masked, unmask now so the icon can display
+              tile.mathMasked = false;
+              tile.randomMasked = false;
+              this.tileRenderer.renderTile(x, y);
             }
           });
         });
@@ -335,6 +363,23 @@ export default class GameScene extends Phaser.Scene {
       }
       // Float coin delta in the right panel
       this.manifest.floatDelta?.('coins', amount);
+
+      // Philanthropist: when you lose gold (not from spending), 25% chance per stack to gain +1 life.
+      // Note: shop spending does not emit GoldGained events, so this naturally excludes spending.
+      if (amount < 0) {
+        const stacksPhil = runState.ownedRelics['Philanthropist'] ?? 0;
+        if (stacksPhil > 0) {
+          const rng = getEffectRng('Philanthropist', runState.stats.revealedCount);
+          for (let i = 0; i < stacksPhil; i++) {
+            if (rng() < 0.25) {
+              runState.lives += 1;
+              events.emit(GameEvent.LifeChanged, { delta: 1 });
+            }
+          }
+          this.manifest.refresh();
+          layoutRightPanel();
+        }
+      }
 
       // Donation Box: each time you gain money, reveal random tile(s).
       // Trigger only on positive gains; schedule asynchronously to avoid deep recursion chains.

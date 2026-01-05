@@ -81,6 +81,9 @@ export default class TitleScene extends Phaser.Scene {
       // eslint-disable-next-line no-console
       console.log('[Minez] Starting new run → TeammateScene');
       // Reset run state for a fresh run
+      // New seed per run so consecutive runs don't look identical.
+      runState.seed = Math.floor(Math.random() * 2 ** 31);
+      runState.rngState = 0;
       runState.level = 1;
       runState.lives = 3;
       runState.gold = 0;
@@ -103,7 +106,11 @@ export default class TitleScene extends Phaser.Scene {
         atmFee: false,
         bloodDiamond: false,
         donationBoxStacks: 0,
-        appraisal: false
+        appraisal: false,
+        shopRerollCount: 0,
+        cheatSheetStacks: 0,
+        luckyPennyStacks: 0,
+        nineToFiveStacks: 0
       };
       runState.stats = {
         revealedCount: 0,

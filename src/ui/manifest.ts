@@ -197,12 +197,16 @@ export class ManifestPanel {
         GoodDeal: '👍',
         RemoteControl: '📺',
         AdvancePayment: '💳',
-        Quartz: '🪨',
+        Quartz: '⚪',
         '2Up': '💞',
         LuckyCat: '🐈‍⬛',
         TarotCard: '🪬',
         MetalDetector: '🔎',
-        LaundryMoney: '🧼'
+        LaundryMoney: '🧼',
+        CheatSheet: '📄',
+        PokerChip: '🃏',
+        LuckyPenny: '🧧',
+        NineToFive: '🏢'
       };
       return m[id] ?? '🟣';
     };
@@ -210,6 +214,7 @@ export class ManifestPanel {
     const challengeLabel = (id: string) => {
       switch (id) {
         case ChallengeId.AutoGrat: return '💸 Auto Grat';
+        case ChallengeId.Stopwatch: return '⏱️ Stopwatch';
         case ChallengeId.MathTest: return '☠️ Math Test';
         case ChallengeId.BadDeal: return '💱 Bad Deal';
         case ChallengeId.Clover2: return '🍀 2-Leaf Clover';

@@ -47,6 +47,8 @@ export interface Tile {
   // Visual masking properties (for UI rendering only, doesn't affect game logic)
   mathMasked?: boolean; // Math Test: numbers >1 show as '?'
   randomMasked?: boolean; // Random 20% chance to show number as '?'
+  // If set, UI should animate a transform (flash old state, then swap to this new display)
+  pendingTransform?: 'Quartz' | 'Ore' | 'Diamond' | 'MegaMine';
 }
 
 export interface Board {

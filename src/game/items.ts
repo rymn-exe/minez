@@ -15,20 +15,24 @@ export interface RelicDef {
 }
 
 export const SHOP_TILES: ShopTileDef[] = [
-  { id: 'Diamond', label: '💎 Diamond', rarity: 'VeryRare' },
+  { id: 'Diamond', label: '💎 Diamond', rarity: 'Rare' },
   { id: '1Up', label: '❤️ 1 Up', rarity: 'Uncommon' },
   { id: 'Pickaxe', label: '🪓 Pickaxe', rarity: 'Common' },
   { id: 'Compass', label: '🧭 Compass', rarity: 'Uncommon' },
-  { id: 'Scratchcard', label: '🎟️ Scratchcard', rarity: 'VeryRare' },
+  { id: 'Scratchcard', label: '🎟️ Scratchcard', rarity: 'Rare' },
   { id: 'GoodDeal', label: '👍 Good Deal', rarity: 'Common' },
   { id: 'RemoteControl', label: '📺 Remote Control', rarity: 'Common' },
   { id: 'AdvancePayment', label: '💳 Advance Payment', rarity: 'Common' },
-  { id: 'Quartz', label: 'Quartz', rarity: 'Common' },
-  { id: '2Up', label: '💞 2 Up', rarity: 'VeryRare' },
+  { id: 'Quartz', label: '⚪ Quartz', rarity: 'Common' },
+  { id: '2Up', label: '💞 2 Up', rarity: 'Rare' },
   { id: 'LuckyCat', label: '🐈‍⬛ Lucky Cat', rarity: 'Uncommon' },
   { id: 'TarotCard', label: '🪬 Tarot Card', rarity: 'Uncommon' },
   { id: 'MetalDetector', label: '🔎 Metal Detector', rarity: 'Uncommon' },
-  { id: 'LaundryMoney', label: '🧼 Laundry Money', rarity: 'Uncommon' }
+  { id: 'LaundryMoney', label: '🧼 Laundry Money', rarity: 'Uncommon' },
+  { id: 'CheatSheet', label: '📄 Cheat Sheet', rarity: 'Common' },
+  { id: 'PokerChip', label: '🃏 Poker Chip', rarity: 'Rare' },
+  { id: 'LuckyPenny', label: '🧧 Lucky Penny', rarity: 'Uncommon' },
+  { id: 'NineToFive', label: '🏢 9-5', rarity: 'Common' }
 ];
 
 export const RELICS: RelicDef[] = [
@@ -50,13 +54,16 @@ export const RELICS: RelicDef[] = [
   { id: 'Entrepreneur', label: '🏭 Entrepreneur', rarity: 'Uncommon' },
   { id: 'Researcher', label: '🧪 Researcher', rarity: 'Uncommon' },
   { id: 'DebtCollector', label: '⚖️ Debt Collector', rarity: 'Uncommon' },
-  { id: 'Auditor', label: '🧾 Auditor', rarity: 'Uncommon' },
   { id: 'Billionaire', label: '👑 Billionaire', rarity: 'Rare' },
   { id: 'Investor', label: '💼 Investor', rarity: 'Rare' },
   { id: 'Optimist', label: '🌞 Optimist', rarity: 'Rare' },
   { id: 'SugarDaddy', label: '🎁 Sugar Daddy', rarity: 'Rare' },
   { id: 'FortuneTeller', label: '🔮 Fortune Teller', rarity: 'Uncommon' },
-  { id: 'Gamer', label: '🎮 Gamer', rarity: 'Rare' }
+  { id: 'Philanthropist', label: '🤲 Philanthropist', rarity: 'Rare' },
+  { id: 'Barterer', label: '🔄 Barterer', rarity: 'Uncommon' },
+  { id: 'Gamer', label: '🎮 Gamer', rarity: 'Rare' },
+  { id: 'Surgeon', label: '🩺 Surgeon', rarity: 'Rare' },
+  { id: 'SalesAssociate', label: '👗 Sales Associate', rarity: 'Rare' }
 ];
 
 export function priceForRarity(r: Rarity): number {

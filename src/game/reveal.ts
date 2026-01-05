@@ -35,8 +35,15 @@ function floodReveal(board: Board, x: number, y: number, visited: Set<number>, r
   if (t.kind === TileKind.Safe) {
     for (const p of neighbors(board, x, y)) {
       const nTile = board.tiles[indexAt(board, p.x, p.y)];
-      if (!nTile.revealed && (nTile.kind === TileKind.Safe || nTile.kind === TileKind.Number)) {
+      if (nTile.revealed || nTile.flagged) continue;
+      if (nTile.kind === TileKind.Safe) {
         floodReveal(board, p.x, p.y, visited, res);
+      } else if (nTile.kind === TileKind.Number) {
+        // IMPORTANT: reveal number tiles via the normal reveal path so that
+        // - 20% random '?' masking applies
+        // - Math Test masking applies
+        // - Number Cruncher / Tarot Card side-effects apply
+        revealTile(board, p.x, p.y, false);
       }
     }
   }
@@ -126,10 +133,6 @@ export function revealTile(board: Board, x: number, y: number, byUser: boolean =
       runState.stats.oreTotal = Math.max(0, runState.stats.oreTotal - 1);
       // Investor: 25% chance Ore becomes Diamond
       const investor = (runState.ownedRelics['Investor'] ?? 0) > 0 && getTileRng(board, x, y)() < 0.25;
-      if (investor) {
-        // mark for UI so icon shows 💎 instead of 🪙
-        tile.subId = 'Diamond';
-      }
       const gain = (runState.persistentEffects.snakeOil
         ? 0
         : (investor ? rngInt(Math.random, 7, 10) : rngInt(Math.random, 2, 5)));
@@ -152,6 +155,10 @@ export function revealTile(board: Board, x: number, y: number, byUser: boolean =
           runState.lives = Math.max(0, runState.lives - 1);
           res.lifeDelta -= 1;
         }
+      }
+      // UI transform: ore → diamond
+      if (investor) {
+        tile.pendingTransform = 'Diamond';
       }
       events.emit(GameEvent.TileRevealed, { tile });
       break;
@@ -241,25 +248,44 @@ export function revealTile(board: Board, x: number, y: number, byUser: boolean =
       if (runState.persistentEffects.mathTest && tile.number > 1) {
         tile.mathMasked = true;
       }
-      // Global masking: every revealed number has a 20% chance to display as '?'
-      // This is a visual mask only; underlying number logic remains unchanged.
+      // Global masking: every revealed number has a base 20% chance to display as '?',
+      // reduced by Cheat Sheet by 5% per stack (clamped at 0%).
       const tileRng = getTileRng(board, x, y);
-      if (tileRng() < 0.20) {
+      const cheatStacks = runState.persistentEffects.cheatSheetStacks ?? 0;
+      const maskChance = Math.max(0, 0.20 - 0.05 * cheatStacks);
+      if (tileRng() < maskChance) {
         tile.randomMasked = true;
       }
-      // Tarot Card: if Math Test is active and this number would show '?', 5% chance to grant currency
-      if (runState.persistentEffects.mathTest && runState.persistentEffects.tarotCard && tile.number > 1) {
-        if (tileRng() < 0.05) {
+
+      // If this number would be shown as '?', Lucky Penny / Tarot Card can “upgrade” it.
+      const isMasked = (tile.mathMasked || tile.randomMasked) && tile.number > 0;
+      if (isMasked) {
+        // Lucky Penny: 5% to become Quartz => +1 gold (blocked by Snake Oil)
+        if ((runState.persistentEffects.luckyPennyStacks ?? 0) > 0 && tileRng() < 0.05) {
+          if (!runState.persistentEffects.snakeOil) {
+            runState.gold += 1;
+            res.goldDelta += 1;
+            events.emit(GameEvent.GoldGained, { amount: 1, source: 'LuckyPennyQuartz' });
+          }
+          // Animate: keep showing '?' for now; swap after UI flash
+          tile.pendingTransform = 'Quartz';
+        }
+        // Tarot Card: 5% to become Quartz/Diamond/Ore
+        if (!tile.pendingTransform && runState.persistentEffects.tarotCard && tileRng() < 0.05) {
           const pick = Math.floor(tileRng() * 3); // 0: Quartz, 1: Ore, 2: Diamond
           let gain = 0;
-          if (pick === 0) gain = 1;
-          else if (pick === 1) gain = rngInt(tileRng, 2, 5);
-          else gain = rngInt(tileRng, 7, 10);
-          if (!runState.persistentEffects.snakeOil || pick === 0) {
+          let show: 'Quartz' | 'Ore' | 'Diamond';
+          if (pick === 0) { gain = 1; show = 'Quartz'; }
+          else if (pick === 1) { gain = rngInt(tileRng, 2, 5); show = 'Ore'; }
+          else { gain = rngInt(tileRng, 7, 10); show = 'Diamond'; }
+          // Snake Oil blocks Quartz/Ore/Diamond gold
+          if (!runState.persistentEffects.snakeOil) {
             runState.gold += gain;
             res.goldDelta += gain;
             events.emit(GameEvent.GoldGained, { amount: gain, source: pick === 0 ? 'TarotQuartz' : pick === 1 ? 'TarotOre' : 'TarotDiamond' });
           }
+          // Animate: keep showing '?' for now; swap after UI flash
+          tile.pendingTransform = show;
         }
       }
       events.emit(GameEvent.TileRevealed, { tile });
@@ -278,6 +304,15 @@ export function revealTile(board: Board, x: number, y: number, byUser: boolean =
   // Emit life change summary for this reveal (positive or negative)
   if (res.lifeDelta !== 0) {
     events.emit(GameEvent.LifeChanged, { delta: res.lifeDelta });
+  }
+
+  // 9-5: whenever you lose a life, gain 2 gold per stack per life lost.
+  if (res.lifeDelta < 0 && (runState.persistentEffects.nineToFiveStacks ?? 0) > 0) {
+    const stacks = runState.persistentEffects.nineToFiveStacks ?? 0;
+    const gain = 2 * stacks * Math.abs(res.lifeDelta);
+    runState.gold += gain;
+    res.goldDelta += gain;
+    events.emit(GameEvent.GoldGained, { amount: gain, source: 'NineToFive' });
   }
 
   return res;
@@ -349,11 +384,13 @@ function applyChallengeOnReveal(board: Board, tile: Tile, res: RevealResult) {
       if (delta !== 0) {
         runState.gold = after;
         res.goldDelta += delta;
+        events.emit(GameEvent.GoldGained, { amount: delta, source: 'BoxingDay' });
       }
       // ATM fee triggers on any gold loss
       if (runState.persistentEffects.atmFee && before > after) {
         runState.gold -= 1;
         res.goldDelta -= 1;
+        events.emit(GameEvent.GoldGained, { amount: -1, source: 'ATMFee' });
       }
       break;
     }
@@ -407,11 +444,20 @@ function applyChallengeOnReveal(board: Board, tile: Tile, res: RevealResult) {
     }
     case ChallengeId.Jackhammer: {
       // Reveal all surrounding tiles, including mines.
+      // Prevent chain reactions: a Jackhammer revealed *by* another Jackhammer does not trigger.
+      if ((tile as any).__fromJackhammer) {
+        delete (tile as any).__fromJackhammer;
+        break;
+      }
       const { x, y } = tile.pos;
       const neighs = neighbors(board, x, y);
       for (const p of neighs) {
         const nt = board.tiles[indexAt(board, p.x, p.y)];
         if (!nt.revealed && !nt.flagged) {
+          // Mark Jackhammers revealed by this effect so they don't cascade.
+          if (nt.kind === TileKind.Challenge && nt.subId === ChallengeId.Jackhammer) {
+            (nt as any).__fromJackhammer = true;
+          }
           revealTile(board, p.x, p.y, false);
         }
       }
@@ -516,12 +562,17 @@ function applyShopTileOnReveal(tile: Tile, res: RevealResult) {
         const idxMine = thisBoard.tiles.findIndex(t => t.kind === TileKind.Mine && !t.flagged && !t.revealed);
         if (idxMine >= 0) {
           thisBoard.tiles[idxMine].flagged = true;
+          thisBoard.tiles[idxMine].flagColor = 'blue';
           // Decrement mines remaining when auto-flagging a real mine
           runState.stats.minesTotal = Math.max(0, runState.stats.minesTotal - 1);
         } else {
           const idxClover = thisBoard.tiles.findIndex(t => t.kind === TileKind.Challenge && t.subId === ChallengeId.Clover2 && !t.flagged && !t.revealed);
-          if (idxClover >= 0) thisBoard.tiles[idxClover].flagged = true;
+          if (idxClover >= 0) {
+            thisBoard.tiles[idxClover].flagged = true;
+            thisBoard.tiles[idxClover].flagColor = 'blue';
+          }
         }
+        events.emit(GameEvent.BoardChanged, { reason: 'RemoteControl' });
       }
       break;
     }
@@ -553,6 +604,46 @@ function applyShopTileOnReveal(tile: Tile, res: RevealResult) {
       runState.persistentEffects.scratchcardStacks += 1;
       break;
     }
+    case 'CheatSheet': {
+      runState.persistentEffects.cheatSheetStacks += 1;
+      break;
+    }
+    case 'LuckyPenny': {
+      runState.persistentEffects.luckyPennyStacks += 1;
+      break;
+    }
+    case 'NineToFive': {
+      runState.persistentEffects.nineToFiveStacks += 1;
+      break;
+    }
+    case 'PokerChip': {
+      // Only once per board.
+      if (!thisBoard || runState.persistentEffects.pokerChipUsedThisLevel) break;
+      runState.persistentEffects.pokerChipUsedThisLevel = true;
+      // Pick one X and one Mine (unrevealed) and mark both with a BLUE flag.
+      const idxX = thisBoard.tiles.findIndex(t => t.kind === TileKind.X && !t.revealed && !t.flagged);
+      const mineCandidates = thisBoard.tiles
+        .map((t, idx) => ({ t, idx }))
+        .filter(({ t }) => t.kind === TileKind.Mine && !t.revealed && !t.flagged);
+      if (idxX >= 0 && mineCandidates.length > 0) {
+        const rng = getTileRng(thisBoard, tile.pos.x, tile.pos.y);
+        const pickedMine = mineCandidates[Math.floor(rng() * mineCandidates.length)];
+        const flag = (idx: number) => {
+          const tt = thisBoard!.tiles[idx];
+          if (!tt.flagged) {
+            tt.flagged = true;
+            tt.flagColor = 'blue';
+            if (tt.kind === TileKind.Mine) {
+              runState.stats.minesTotal = Math.max(0, runState.stats.minesTotal - 1);
+            }
+          }
+        };
+        flag(idxX);
+        flag(pickedMine.idx);
+        events.emit(GameEvent.BoardChanged, { reason: 'PokerChip' });
+      }
+      break;
+    }
     case 'Receipt': {
       runState.shopFreePurchases += 1;
       break;
@@ -570,11 +661,13 @@ function applyShopTileOnReveal(tile: Tile, res: RevealResult) {
           const tt = thisBoard.tiles[indexAt(thisBoard, p.x, p.y)];
           if (!tt.flagged && !tt.revealed && (tt.kind === TileKind.Mine || (tt.kind === TileKind.Challenge && tt.subId === ChallengeId.Clover2))) {
             tt.flagged = true;
+            tt.flagColor = 'blue';
             if (tt.kind === TileKind.Mine) {
               runState.stats.minesTotal = Math.max(0, runState.stats.minesTotal - 1);
             }
           }
         }
+        events.emit(GameEvent.BoardChanged, { reason: 'MetalDetector' });
       }
       break;
     }
@@ -601,9 +694,9 @@ function applyShopTileOnReveal(tile: Tile, res: RevealResult) {
         res.goldDelta += amount;
         events.emit(GameEvent.GoldGained, { amount, source: investor ? 'InvestorDiamond' : 'Quartz' });
       }
-      // Show 💎 if upgraded
+      // UI transform: quartz → diamond
       if (investor) {
-        tile.subId = 'Diamond';
+        tile.pendingTransform = 'Diamond';
       }
       // Blood Diamond: +1 life loss
       if (runState.persistentEffects.bloodDiamond) {

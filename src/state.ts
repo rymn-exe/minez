@@ -30,6 +30,11 @@ export interface RunState {
     bloodDiamond: boolean;
     donationBoxStacks: number;
     appraisal: boolean;
+    buyLifeBoughtThisShop?: boolean;
+    shopRerollCount: number;
+    cheatSheetStacks: number;
+    luckyPennyStacks: number;
+    nineToFiveStacks: number;
   };
   stats: {
     revealedCount: number;
@@ -75,7 +80,11 @@ export const runState: RunState = {
     atmFee: false,
     bloodDiamond: false,
     donationBoxStacks: 0,
-    appraisal: false
+    appraisal: false,
+    shopRerollCount: 0,
+    cheatSheetStacks: 0,
+    luckyPennyStacks: 0,
+    nineToFiveStacks: 0
   },
   stats: {
     revealedCount: 0,

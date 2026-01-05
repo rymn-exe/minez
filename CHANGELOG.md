@@ -1,3 +1,13 @@
+## v2.1.0 (locked)
+
+- Core
+  - Ore generation updated: 1 guaranteed 🪙 Ore per board (+Entrepreneur bonus).
+  - Shop spawning updated: for each owned shop tile, 80% chance to spawn at least one copy (still capped on small boards).
+  - Exit + Stopwatch UX: unrevealed ⏱️ Stopwatches now reveal when you click ❌, flash twice, then show 💥 before applying the life penalty.
+- Fixes
+  - Board Manifest: ⏱️ Stopwatch now shows its icon.
+  - Poker Chip (and other auto-flag effects): flags now render immediately and mine counter updates correctly.
+
 ## v2.0.0 (locked)
 
 - Core
