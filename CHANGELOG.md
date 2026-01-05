@@ -1,3 +1,11 @@
+## v2.0.0 (locked)
+
+- Core
+  - New run flow: Start → Collectible → Level → Shop → Challenge Draft → Level… → Win.
+  - Challenge drafting: pick 1 of 2 challenge tiles after each shop; drafted challenges spawn on future boards.
+  - Fixed per-level challenge tables removed; challenges are now player-built via drafting.
+  - Added new challenge tiles: 🦝 Thief, 🛠️ Jackhammer, 🎁 Donation Box, 📏 Appraisal, 🔑 Key.
+
 ## v1.2.0 (locked)
 
 - Core

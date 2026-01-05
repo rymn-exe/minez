@@ -24,6 +24,7 @@ export class FlagPaintMode {
   private flagSwatchHalos: Phaser.GameObjects.Arc[] = [];
   private flagSwatchKeys: FlagColor[] = [];
   private swatchLastClickTs: Record<string, number> = {};
+  private swatchNodes: Phaser.GameObjects.GameObject[] = [];
   private disposers: Array<() => void> = [];
 
   constructor(
@@ -34,6 +35,10 @@ export class FlagPaintMode {
   ) {}
 
   setupSwatches(x: number, y: number, width: number): void {
+    // Rebuild-safe: clear any existing swatch UI before drawing new layout.
+    for (const n of this.swatchNodes) n.destroy();
+    this.swatchNodes = [];
+
     const topY = y + 8;
     const cardLeft = x - 2;
     const cardRight = x + width - 12;
@@ -49,6 +54,7 @@ export class FlagPaintMode {
     const cardHeight = 18 + r * 2 + 18;
     cardGfx.fillRoundedRect(cardLeft, topY, cardWidth, cardHeight, 12);
     cardGfx.strokeRoundedRect(cardLeft, topY, cardWidth, cardHeight, 12);
+    this.swatchNodes.push(cardGfx);
 
     // Swatches
     const colors: Array<[FlagColor, number]> = [
@@ -102,6 +108,7 @@ export class FlagPaintMode {
       this.flagSwatchHalos.push(halo);
       this.flagSwatches.push(node);
       this.flagSwatchKeys.push(key);
+      this.swatchNodes.push(halo, node);
       cx += r * 2 + gap;
     });
     
@@ -181,6 +188,8 @@ export class FlagPaintMode {
   cleanup(): void {
     for (const off of this.disposers) off();
     this.disposers = [];
+    for (const n of this.swatchNodes) n.destroy();
+    this.swatchNodes = [];
     this.disable();
   }
 }

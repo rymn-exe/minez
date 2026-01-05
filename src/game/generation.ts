@@ -1,7 +1,7 @@
 // Board generation:
 //  - Creates the truth board for a level (no rendering here)
 //  - Applies relic modifiers (Diffuser, Entrepreneur)
-//  - Places exact challenge counts from LEVEL_SPECS
+//  - Places drafted challenge tiles from the run's pool (guarantee 1 spawn per drafted challenge, then weighted rolls)
 //  - Spawns shop tiles probabilistically from owned pool (with Accountant bonus)
 //  - Guarantees one ❤️ 1Up per level
 import { Board, Tile, TileKind, ChallengeId, indexAt } from './types';
@@ -9,6 +9,41 @@ import { LEVEL_SPECS } from './levelConfig';
 import { createRng, rngInt, pickRandom } from './rng';
 import { runState } from '../state';
 import { SHOP_SPAWN_CAP_PER_LEVEL, SHOP_BASE_SPAWN_CHANCE } from './consts';
+
+type SpawnBand = 'Low' | 'Medium' | 'High' | 'VeryHigh';
+const SPAWN_TARGET: Record<SpawnBand, number> = {
+  Low: 2,
+  Medium: 4,
+  High: 7,
+  VeryHigh: 10
+};
+
+// Challenge spawn tuning (player-drafted pool):
+// Each drafted challenge spawns stochastically with an expected count per stack.
+// We implement a binomial roll with p=0.5 and N=2*target per stack, so E[count]=target per stack.
+// Additionally, any drafted challenge is guaranteed to spawn at least once per level.
+const CHALLENGE_SPAWN_BAND: Record<string, SpawnBand> = {
+  [ChallengeId.AutoGrat]: 'High',
+  [ChallengeId.MathTest]: 'Low',
+  [ChallengeId.BadDeal]: 'Low',
+  [ChallengeId.Clover2]: 'High',
+  [ChallengeId.SnakeOil]: 'Medium',
+  [ChallengeId.SnakeVenom]: 'Medium',
+  [ChallengeId.BloodPact]: 'High',
+  [ChallengeId.CarLoan]: 'Medium',
+  [ChallengeId.MegaMine]: 'Medium',
+  [ChallengeId.BloodDiamond]: 'Low',
+  [ChallengeId.FindersFee]: 'High',
+  [ChallengeId.ATMFee]: 'Medium',
+  [ChallengeId.BoxingDay]: 'Medium',
+  [ChallengeId.Stopwatch]: 'Medium',
+  [ChallengeId.Thief]: 'Medium',
+  [ChallengeId.Jackhammer]: 'High',
+  [ChallengeId.DonationBox]: 'High',
+  [ChallengeId.Appraisal]: 'High',
+  [ChallengeId.Key]: 'Medium'
+  // Coal intentionally excluded
+};
 
 /** Returned by `generateLevel` to the Scene to build the visual board. */
 interface GenerationResult {
@@ -117,24 +152,32 @@ export function generateLevel(width: number, height: number): GenerationResult {
   placeRandomTiles(board, mines, TileKind.Mine, undefined, rand);
   placeRandomTiles(board, ore, TileKind.Ore, undefined, rand);
 
-  // Handle Coal: replace Ore tiles with Coal challenge tiles
-  const coalSpec = levelSpec.challenges.find(c => c.id === ChallengeId.Coal);
-  if (coalSpec && coalSpec.count > 0) {
-    let remaining = coalSpec.count;
-    for (let i = 0; i < board.tiles.length && remaining > 0; i++) {
-      const t = board.tiles[i];
-      if (t.kind === TileKind.Ore) {
-        t.kind = TileKind.Challenge;
-        t.subId = ChallengeId.Coal;
-        remaining--;
+  // Place drafted challenge tiles from run pool.
+  // - Level 1 starts with an empty pool (no challenges).
+  // - Any drafted challenge spawns at least once per level.
+  // - Additional copies are rolled per extra stack.
+  const draftedEntries = Object.entries(runState.ownedChallenges || {}).filter(([, n]) => (n ?? 0) > 0);
+  for (const [id, nRaw] of draftedEntries) {
+    const n = Number(nRaw) || 0;
+    if (n <= 0) continue;
+    if (id === String(ChallengeId.Coal)) continue; // never spawn Coal via drafting
+    const band = CHALLENGE_SPAWN_BAND[id];
+    if (!band) continue;
+    const target = SPAWN_TARGET[band];
+    const p = 0.5;
+    const trialsPerStack = Math.max(1, Math.floor(target * 2));
+    let spawnedForThis = 0;
+    for (let s = 0; s < n; s++) {
+      for (let t = 0; t < trialsPerStack; t++) {
+        if (rand() < p) {
+          placeSpecialNearMine(board, 1, TileKind.Challenge, id, rand);
+          spawnedForThis++;
+        }
       }
     }
-  }
-  // Place other challenge tiles (exact counts)
-  for (const ch of levelSpec.challenges) {
-    if (ch.id === ChallengeId.Coal) continue; // already handled
-    for (let i = 0; i < ch.count; i++) {
-      placeSpecialNearMine(board, 1, TileKind.Challenge, ch.id, rand);
+    // Guarantee at least one spawn per drafted challenge per level
+    if (spawnedForThis === 0) {
+      placeSpecialNearMine(board, 1, TileKind.Challenge, id, rand);
     }
   }
 
@@ -199,7 +242,7 @@ export function generateLevel(width: number, height: number): GenerationResult {
   // recompute total shop tiles from counts (includes guaranteed 1Up)
   // (set a provisional value; will be finalized after counts below)
   runState.stats.shopTilesRemaining = spawned;
-  runState.stats.challengeTilesRemaining = levelSpec.challenges.reduce((a, c) => a + c.count, 0);
+  runState.stats.challengeTilesRemaining = 0;
   // Build per-type counts
   runState.stats.shopCounts = {};
   runState.stats.challengeCounts = {};
@@ -213,6 +256,8 @@ export function generateLevel(width: number, height: number): GenerationResult {
   }
   // Finalize total shop count from per-type map (ensures guaranteed 1Up is counted)
   runState.stats.shopTilesRemaining = Object.values(runState.stats.shopCounts).reduce((a, b) => a + b, 0);
+  // Finalize total challenge count from per-type map
+  runState.stats.challengeTilesRemaining = Object.values(runState.stats.challengeCounts).reduce((a, b) => a + b, 0);
 
   // Stopwatches disabled for now
   runState.persistentEffects.stopwatchCount = 0;
@@ -223,6 +268,8 @@ export function generateLevel(width: number, height: number): GenerationResult {
   runState.persistentEffects.atmFee = (runState.stats.challengeCounts[ChallengeId.ATMFee] ?? 0) > 0;
   runState.persistentEffects.bloodDiamond = (runState.stats.challengeCounts[ChallengeId.BloodDiamond] ?? 0) > 0;
   runState.persistentEffects.tarotCard = false;
+  runState.persistentEffects.appraisal = false;
+  runState.persistentEffects.donationBoxStacks = 0;
 
   return { board };
 }

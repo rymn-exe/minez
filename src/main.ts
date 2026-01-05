@@ -5,6 +5,7 @@ import { VIEW_WIDTH, VIEW_HEIGHT } from './game/consts';
 import TitleScene from './scenes/TitleScene';
 import TeammateScene from './scenes/TeammateScene';
 import ButtonPreviewScene from './scenes/ButtonPreviewScene';
+import ChallengeScene from './scenes/ChallengeScene';
 
 const config: Phaser.Types.Core.GameConfig = {
   type: Phaser.AUTO,
@@ -24,7 +25,7 @@ const config: Phaser.Types.Core.GameConfig = {
     width: VIEW_WIDTH,
     height: VIEW_HEIGHT
   },
-  scene: [TitleScene, TeammateScene, GameScene, ShopScene, ButtonPreviewScene]
+  scene: [TitleScene, TeammateScene, GameScene, ShopScene, ChallengeScene, ButtonPreviewScene]
 };
 
 const start = async () => {

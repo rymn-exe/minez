@@ -87,38 +87,49 @@ export const RELIC_UI_TEXT: Record<string, string> = {
 
 export const CHALLENGE_DESCRIPTIONS: Record<string, string> = {
   AutoGrat: 'Steals 1 gold on reveal.',
-  Stopwatch: 'Disabled in v1.3.',
+  Stopwatch: 'If you leave without revealing it: lose 1 life.',
   MathTest: 'Numbers >1 display as ? for the rest of the level.',
   BadDeal: 'Gain +1 gold, lose 1 life.',
   Clover2: 'Counts as a mine for numbers but does not explode.',
-  SnakeOil: 'Subsequent ⚪/🪙/💎 tiles grant no gold.',
+  SnakeOil: 'For the rest of the level, Quartz/Ore/Diamond grant no gold.',
   SnakeVenom: 'While active: revealing a 3+ has a 25% chance to lose 1 life.',
   BloodPact: 'If you have 3+ lives, lose 1 life.',
   CarLoan: 'Subsequent special tiles cost 1 gold to reveal.',
   MegaMine: 'Counts as a mine. If lives > 2: lose 2 lives; else lose 1.',
-  BloodDiamond: '⚪/🪙/💎 also cost 1 life when revealed (in addition to gold).',
+  BloodDiamond: 'For the rest of the level, Quartz/Ore/Diamond also cost 1 life when revealed.',
   FindersFee: 'If revealed before ❌, you do not receive end-of-level gold.',
   ATMFee: 'Whenever you lose gold this level, lose +1 additional gold.',
   Coal: 'No effect. Replaces an Ore tile at generation.',
-  BoxingDay: 'Lose half your gold (rounded down).'
+  BoxingDay: 'Lose half your gold (rounded down).',
+  Thief: 'Steals a random collectible immediately.',
+  Jackhammer: 'Reveals all surrounding tiles (including mines).',
+  DonationBox: 'Each time you gain gold, a random tile is revealed.',
+  Appraisal: 'For the rest of the level, revealing Quartz costs 1 life.',
+  Key: 'You must reveal the key before you can exit.'
 };
 
 // UI-focused copy for challenge tiles
 export const CHALLENGE_UI_TEXT: Record<string, string> = {
   AutoGrat: 'Lose 1 gold when this tile is revealed.',
+  Stopwatch: 'You must reveal this before exiting, or it explodes for 1 life.',
   MathTest: 'Number tiles showing 2 or higher appear as ?.',
   BadDeal: 'Gain +1 gold and lose 1 life.',
   Clover2: 'This tile counts as a mine for numbers, but does not explode when revealed.',
-  SnakeOil: 'For the rest of this level, Zirconium, Ore, and Diamond grant no gold.',
+  SnakeOil: 'For the rest of this level, Quartz, Ore, and Diamond grant no gold.',
   SnakeVenom: 'When revealing a 3 or higher, you have a 25% chance to lose 1 life.',
   BloodPact: 'If you have 3 or more lives, lose 1 life when this is revealed.',
   CarLoan: 'For the rest of this level, special tiles cost 1 gold to reveal.',
   MegaMine: 'This tile counts as a mine. If you have more than 2 lives, lose 2 lives instead of 1.',
-  BloodDiamond: 'For the rest of this level, Zirconium, Ore, and Diamond also cost 1 life when revealed.',
+  BloodDiamond: 'For the rest of this level, Quartz, Ore, and Diamond also cost 1 life when revealed.',
   FindersFee: 'If revealed before the X, you do not gain the 5 gold at the end of the level.',
   ATMFee: 'For the rest of this level, whenever you lose gold, lose 1 additional gold.',
   Coal: 'This tile has no effect. It replaces an Ore tile.',
-  BoxingDay: 'Lose half your gold, rounded down.'
+  BoxingDay: 'Lose half your gold, rounded down.',
+  Thief: 'Steals a random collectible.',
+  Jackhammer: 'Reveals all surrounding tiles.',
+  DonationBox: 'Each time you gain money, a random tile is revealed.',
+  Appraisal: 'Revealing Quartz costs you one life.',
+  Key: 'You must find the key tile before you\'re able to exit.'
 };
 export const EXTRA_RELIC_DESCRIPTIONS: Record<string, string> = {
   Billionaire: 'If you would lose a life and have ≥5 gold and >1 life, lose 5g instead.',

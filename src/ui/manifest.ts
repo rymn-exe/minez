@@ -223,6 +223,11 @@ export class ManifestPanel {
         case ChallengeId.ATMFee: return '🏧 ATM Fee';
         case ChallengeId.Coal: return '🪨 Coal';
         case ChallengeId.BoxingDay: return '🥊 Boxing Day';
+        case ChallengeId.Thief: return '🦝 Thief';
+        case ChallengeId.Jackhammer: return '🛠️ Jackhammer';
+        case ChallengeId.DonationBox: return '🎁 Donation Box';
+        case ChallengeId.Appraisal: return '📏 Appraisal';
+        case ChallengeId.Key: return '🔑 Key';
         default: return id;
       }
     };
@@ -256,9 +261,20 @@ export class ManifestPanel {
     // Bad entries
     const badEntries: Array<{ label: string; n: number; id?: string; type: 'builtin' | 'challenge' }> = [];
     badEntries.push({ label: '💣 Mines', n: runState.stats.minesTotal, type: 'builtin' });
-    const challengeEntries = Object.entries(runState.stats.challengeCounts).filter(([id]) => id !== String(ChallengeId.Stopwatch));
+    const challengeEntries = Object.entries(runState.stats.challengeCounts).filter(([id]) => id !== String(ChallengeId.Coal));
     for (const [id, n] of challengeEntries) {
       badEntries.push({ label: challengeLabel(id), n: n as number, id, type: 'challenge' });
+    }
+    // Ensure drafted challenges appear even if they didn't spawn this level (count 0)
+    {
+      const seenChallengeIds: Record<string, boolean> = {};
+      for (const [id] of challengeEntries) seenChallengeIds[id] = true;
+      for (const [ownedId, count] of Object.entries(runState.ownedChallenges || {})) {
+        if (!count || count <= 0) continue;
+        if (ownedId === String(ChallengeId.Coal)) continue;
+        if (seenChallengeIds[ownedId]) continue;
+        badEntries.push({ label: challengeLabel(ownedId), n: 0, id: ownedId, type: 'challenge' });
+      }
     }
     // Draw rows: good then bad
     const drawRow = (labelText: string, count: number, labelColor: string, hoverId?: { kind: 'shop' | 'builtinGood' | 'challenge' | 'builtinBad'; id?: string }) => {

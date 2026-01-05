@@ -86,6 +86,7 @@ export default class TitleScene extends Phaser.Scene {
       runState.gold = 0;
       runState.ownedShopTiles = {};
       runState.ownedRelics = {};
+      runState.ownedChallenges = {};
       runState.shopFreePurchases = 0;
       runState.persistentEffects = {
         carLoan: false,
@@ -100,7 +101,9 @@ export default class TitleScene extends Phaser.Scene {
         rerolledThisShop: false,
         noEndGold: false,
         atmFee: false,
-        bloodDiamond: false
+        bloodDiamond: false,
+        donationBoxStacks: 0,
+        appraisal: false
       };
       runState.stats = {
         revealedCount: 0,

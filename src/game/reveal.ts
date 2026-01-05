@@ -181,7 +181,7 @@ export function revealTile(board: Board, x: number, y: number, byUser: boolean =
         res.goldDelta += runState.persistentEffects.scratchcardStacks;
         events.emit(GameEvent.GoldGained, { amount: runState.persistentEffects.scratchcardStacks, source: 'Scratchcard' });
       }
-      applyChallengeOnReveal(tile, res);
+      applyChallengeOnReveal(board, tile, res);
       events.emit(GameEvent.TileRevealed, { tile });
       break;
     }
@@ -283,7 +283,7 @@ export function revealTile(board: Board, x: number, y: number, byUser: boolean =
   return res;
 }
 
-function applyChallengeOnReveal(tile: Tile, res: RevealResult) {
+function applyChallengeOnReveal(board: Board, tile: Tile, res: RevealResult) {
   switch (tile.subId) {
     case ChallengeId.AutoGrat: {
       let loss = 1;
@@ -298,7 +298,7 @@ function applyChallengeOnReveal(tile: Tile, res: RevealResult) {
       break;
     }
     case ChallengeId.Stopwatch: {
-      // Disabled
+      // No immediate effect. Leaving the level with any unrevealed stopwatches costs lives (handled on exit).
       break;
     }
     case ChallengeId.MathTest: {
@@ -392,6 +392,43 @@ function applyChallengeOnReveal(tile: Tile, res: RevealResult) {
     }
     case ChallengeId.CarLoan: {
       runState.persistentEffects.carLoan = true;
+      break;
+    }
+    case ChallengeId.Thief: {
+      // Steal a random owned collectible immediately.
+      const owned = Object.entries(runState.ownedRelics || {}).filter(([, n]) => (n ?? 0) > 0);
+      if (owned.length > 0) {
+        const rng = getEffectRng('Thief', runState.stats.revealedCount);
+        const pick = owned[Math.floor(rng() * owned.length)];
+        const id = pick[0];
+        runState.ownedRelics[id] = Math.max(0, (runState.ownedRelics[id] ?? 0) - 1);
+      }
+      break;
+    }
+    case ChallengeId.Jackhammer: {
+      // Reveal all surrounding tiles, including mines.
+      const { x, y } = tile.pos;
+      const neighs = neighbors(board, x, y);
+      for (const p of neighs) {
+        const nt = board.tiles[indexAt(board, p.x, p.y)];
+        if (!nt.revealed && !nt.flagged) {
+          revealTile(board, p.x, p.y, false);
+        }
+      }
+      break;
+    }
+    case ChallengeId.DonationBox: {
+      // Each time you gain gold, reveal a random tile (handled by GameScene on GoldGained).
+      runState.persistentEffects.donationBoxStacks += 1;
+      break;
+    }
+    case ChallengeId.Appraisal: {
+      // Quartz costs 1 life when revealed (for the rest of the level).
+      runState.persistentEffects.appraisal = true;
+      break;
+    }
+    case ChallengeId.Key: {
+      // No immediate effect. Exiting requires revealing all keys (handled on exit).
       break;
     }
   }
@@ -572,6 +609,16 @@ function applyShopTileOnReveal(tile: Tile, res: RevealResult) {
       if (runState.persistentEffects.bloodDiamond) {
         const canB2 = (runState.ownedRelics['Billionaire'] ?? 0) > 0 && runState.lives > 1 && runState.gold >= 5;
         if (canB2) {
+          runState.gold -= 5; res.goldDelta -= 5;
+          if (runState.persistentEffects.atmFee) { runState.gold -= 1; res.goldDelta -= 1; }
+        } else {
+          runState.lives = Math.max(0, runState.lives - 1); res.lifeDelta -= 1;
+        }
+      }
+      // Appraisal: Quartz costs 1 life
+      if (runState.persistentEffects.appraisal) {
+        const canB3 = (runState.ownedRelics['Billionaire'] ?? 0) > 0 && runState.lives > 1 && runState.gold >= 5;
+        if (canB3) {
           runState.gold -= 5; res.goldDelta -= 5;
           if (runState.persistentEffects.atmFee) { runState.gold -= 1; res.goldDelta -= 1; }
         } else {

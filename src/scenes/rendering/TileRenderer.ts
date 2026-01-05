@@ -175,11 +175,17 @@ export class TileRenderer {
       case ChallengeId.SnakeVenom: return '🐍';
       case ChallengeId.BloodPact: return '🩸';
       case ChallengeId.CarLoan: return '🚗';
+      case ChallengeId.MegaMine: return '💥';
       case ChallengeId.BloodDiamond: return '🔻';
       case ChallengeId.FindersFee: return '🫴';
       case ChallengeId.ATMFee: return '🏧';
       case ChallengeId.Coal: return '🪨';
       case ChallengeId.BoxingDay: return '🥊';
+      case ChallengeId.Thief: return '🦝';
+      case ChallengeId.Jackhammer: return '🛠️';
+      case ChallengeId.DonationBox: return '🎁';
+      case ChallengeId.Appraisal: return '📏';
+      case ChallengeId.Key: return '🔑';
       default: return '🟠';
     }
   }

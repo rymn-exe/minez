@@ -26,7 +26,12 @@ export enum ChallengeId {
   FindersFee = 'FindersFee',
   ATMFee = 'ATMFee',
   Coal = 'Coal',
-  BoxingDay = 'BoxingDay'
+  BoxingDay = 'BoxingDay',
+  Thief = 'Thief',
+  Jackhammer = 'Jackhammer',
+  DonationBox = 'DonationBox',
+  Appraisal = 'Appraisal',
+  Key = 'Key'
 }
 
 export interface Tile {

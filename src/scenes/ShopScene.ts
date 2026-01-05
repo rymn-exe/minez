@@ -316,7 +316,10 @@ export default class ShopScene extends Phaser.Scene {
         runState.persistentEffects.snakeOil = false;
         runState.persistentEffects.mathTest = false;
         runState.persistentEffects.snakeVenom = { active: false, revealsUntilHit: 8 };
-        this.scene.start('GameScene');
+        runState.persistentEffects.donationBoxStacks = 0;
+        runState.persistentEffects.appraisal = false;
+        // Draft a challenge for the upcoming level
+        this.scene.start('ChallengeScene');
       });
       // Keep label above the graphics; zone is invisible and captures input
     }

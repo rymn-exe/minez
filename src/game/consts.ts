@@ -16,4 +16,3 @@ export const ECONOMY = {
 export const SHOP_SPAWN_CAP_PER_LEVEL = 2;
 export const SHOP_BASE_SPAWN_CHANCE = 0.505; // per slot, before Accountant (↑ by 0.5%)
 
-

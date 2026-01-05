@@ -41,6 +41,15 @@ export function getTeammateRng(): () => number {
 }
 
 /**
+ * Get RNG for challenge selection (deterministic based on seed + upcoming level)
+ * Used by ChallengeScene to offer 2 drafted challenges each level.
+ */
+export function getChallengeRng(): () => number {
+  // runState.level at ChallengeScene time is already the upcoming level
+  return createRng(runState.seed + runState.level + 75000);
+}
+
+/**
  * Get RNG for a specific effect/action (deterministic based on seed + level + effectId)
  * Use this for effect-specific randomness that needs to be consistent
  */

@@ -26,6 +26,7 @@ import { LevelResolver } from './gameplay/LevelResolver';
 import { TileRenderer } from './rendering/TileRenderer';
 import { InputHandler } from './input/InputHandler';
 import { BoardSetup } from './gameplay/BoardSetup';
+import { getEffectRng } from '../game/rngUtils';
 
 const TILE_NORMAL = 0x2a2a34;
 const TILE_HOVER = 0x3a3a46;
@@ -48,6 +49,9 @@ export default class GameScene extends Phaser.Scene {
   private optimistShownThisLevel: boolean = false;
   private flagPaintMode!: FlagPaintMode;
   private inputHandler!: InputHandler;
+  private flagTitleText?: Phaser.GameObjects.Text;
+  private sideX: number = 0;
+  private flagCardWidth: number = 0;
 
   constructor() {
     super('GameScene');
@@ -136,6 +140,7 @@ export default class GameScene extends Phaser.Scene {
     const BOARD_TOP = PADDING;
     // Side panel aligned to actual board width (fix spacing)
     const sideX = BOARD_LEFT + GRID_SIZE * this.boardCell + PADDING;
+    this.sideX = sideX;
     // Align right panel top more closely with the board top while keeping header clearance
     this.manifest = new ManifestPanel(this, sideX, PADDING + 24, {
       hoverProxy: (name, color, desc) => this.hoverSystem.setHover(name, color, desc),
@@ -144,18 +149,18 @@ export default class GameScene extends Phaser.Scene {
     this.effectsPanel = new ActiveEffectsPanel(this, sideX, this.manifest.getBottomY() + 12);
     // Flag color picker (right panel) styled as a card
     {
-      const efp = this.effectsPanel as ActiveEffectsPanelWithExtensions;
-      const title = this.add.text(
-        sideX,
-        (efp.getBottomY ? efp.getBottomY() + 12 : (this.manifest.getBottomY() + 12)),
-        'Flag Colour',
-        { fontFamily: 'LTHoop', fontSize: '16px', color: '#e9e9ef' }
-      ).setOrigin(0, 0);
-      const topY = (title.getBounds ? title.getBounds().bottom : title.y + 30) + 8;
       // Align card to the side panel like other cards
       const mainX = Math.max(12, sideX - 12);
       const panelW = Math.min(360, this.scale.width - mainX - 12);
       const cardWidth = Math.max(220, (mainX + panelW - 12) - (sideX - 2));
+      this.flagCardWidth = cardWidth;
+      // Create title once; position is updated by layoutRightPanel()
+      this.flagTitleText = this.add.text(
+        sideX,
+        this.manifest.getBottomY() + 12,
+        'Flag Colour',
+        { fontFamily: 'LTHoop', fontSize: '16px', color: '#e9e9ef' }
+      ).setOrigin(0, 0);
       
       // Initialize flag paint mode system
       this.flagPaintMode = new FlagPaintMode(
@@ -164,16 +169,33 @@ export default class GameScene extends Phaser.Scene {
         (enabled) => { /* Paint mode changed */ },
         () => this.tileRenderer.renderAll()
       );
-      this.flagPaintMode.setupSwatches(sideX, topY, cardWidth);
+      // Initial layout below
     }
+
+    const layoutRightPanel = () => {
+      try {
+        // Active effects always live just below the manifest
+        this.effectsPanel.setTop(this.manifest.getBottomY() + 12);
+        this.effectsPanel.refresh?.();
+        // Flag section should be below active effects, even if effects text grows
+        if (this.flagTitleText) {
+          const effectsBottom = (this.effectsPanel as any).getBottomY ? (this.effectsPanel as any).getBottomY() : (this.manifest.getBottomY() + 12);
+          this.flagTitleText.setY(effectsBottom + 12);
+          const topY = (this.flagTitleText.getBounds ? this.flagTitleText.getBounds().bottom : this.flagTitleText.y + 30) + 8;
+          this.flagPaintMode.setupSwatches(this.sideX, topY, this.flagCardWidth);
+          this.flagPaintMode.refresh();
+        }
+      } catch {}
+    };
+
+    // Initial right panel layout (and any time heights change)
+    layoutRightPanel();
     // Nudge: some browsers settle webfonts one frame late even after fonts.ready.
     // Force a second-pass layout once shortly after create so texts pick up LTHoop.
     this.time.delayedCall(60, () => {
       try {
         this.manifest.refresh();
-        this.effectsPanel.setTop(this.manifest.getBottomY() + 12);
-        this.effectsPanel.refresh?.();
-        this.flagPaintMode.refresh();
+        layoutRightPanel();
       } catch {}
     });
     // Create tile rectangles and labels
@@ -297,6 +319,7 @@ export default class GameScene extends Phaser.Scene {
         runState.gold += 5 * stacks;
         this.levelResolver.markCartographerAwarded();
         this.manifest.refresh();
+        layoutRightPanel();
       }
     }));
 
@@ -308,14 +331,37 @@ export default class GameScene extends Phaser.Scene {
         // eslint-disable-next-line no-console
         console.log('[Minez] Tax Collector +', stacks, 'from', source);
         this.manifest.refresh();
+        layoutRightPanel();
       }
       // Float coin delta in the right panel
       this.manifest.floatDelta?.('coins', amount);
+
+      // Donation Box: each time you gain money, reveal random tile(s).
+      // Trigger only on positive gains; schedule asynchronously to avoid deep recursion chains.
+      if (amount > 0 && runState.persistentEffects.donationBoxStacks > 0 && !this.resolvingEnd) {
+        const stacksDB = runState.persistentEffects.donationBoxStacks;
+        for (let i = 0; i < stacksDB; i++) {
+          this.time.delayedCall(40 + i * 50, () => {
+            if (this.resolvingEnd) return;
+            // pick a random unrevealed, unflagged tile
+            const candidates = this.board.tiles.filter(t => !t.revealed && !t.flagged);
+            if (candidates.length === 0) return;
+            // Deterministic: seeded per level, offset by revealedCount so it evolves over time
+            const rng = getEffectRng('DonationBox', runState.stats.revealedCount + i);
+            const idx = Math.floor(rng() * candidates.length);
+            const p = candidates[idx].pos;
+            revealTile(this.board, p.x, p.y, false);
+            this.manifest.refresh();
+            layoutRightPanel();
+          });
+        }
+      }
     }));
     // Lives delta float
     this.disposers.push(events.on(GameEvent.LifeChanged, ({ delta }: LifeChangedPayload) => {
       this.manifest.floatDelta?.('lives', delta);
       this.manifest.refresh();
+      layoutRightPanel();
     }));
 
     // Unsubscribe on scene shutdown to avoid listener leaks across levels
@@ -346,6 +392,11 @@ export default class GameScene extends Phaser.Scene {
       case String(ChallengeId.ATMFee): return '🏧 ATM Fee';
       case String(ChallengeId.Coal): return '🪨 Coal';
       case String(ChallengeId.BoxingDay): return '🥊 Boxing Day';
+      case String(ChallengeId.Thief): return '🦝 Thief';
+      case String(ChallengeId.Jackhammer): return '🛠️ Jackhammer';
+      case String(ChallengeId.DonationBox): return '🎁 Donation Box';
+      case String(ChallengeId.Appraisal): return '📏 Appraisal';
+      case String(ChallengeId.Key): return '🔑 Key';
       default: return id;
     }
   }

@@ -221,7 +221,40 @@ export class InputHandler {
     this.effectsPanel.refresh?.();
     // If X is clicked when already revealed, proceed the level (stopwatches disabled).
     if (wasX) {
-      let toLose = 0;
+      // Key gate: must reveal all keys before exiting.
+      const hasUnrevealedKey = this.board.tiles.some(t =>
+        t.kind === TileKind.Challenge &&
+        t.subId === ChallengeId.Key &&
+        !t.revealed
+      );
+      if (hasUnrevealedKey) {
+        // Quick UI feedback: shake the X tile label
+        const label = this.numbers[y][x];
+        if (label) {
+          const origX = label.x;
+          label.setColor('#fca5a5');
+          this.scene.tweens.add({
+            targets: label,
+            x: origX + 6,
+            yoyo: true,
+            repeat: 5,
+            duration: 35,
+            onComplete: () => {
+              label.setX(origX);
+              label.setColor('#d6d6dc');
+            }
+          });
+        }
+        return;
+      }
+
+      // Stopwatch penalty: lose 1 life per unrevealed stopwatch when exiting.
+      const stopwatchesLeft = this.board.tiles.filter(t =>
+        t.kind === TileKind.Challenge &&
+        t.subId === ChallengeId.Stopwatch &&
+        !t.revealed
+      ).length;
+      let toLose = stopwatchesLeft;
       const finalize = () => {
         const survived = runState.lives > 0;
         if (survived) {
