@@ -6,6 +6,7 @@ import { VIEW_WIDTH } from '../game/consts';
 import { RELICS } from '../game/items';
 import { RELIC_DESCRIPTIONS, EXTRA_RELIC_DESCRIPTIONS, RELIC_UI_TEXT } from '../game/descriptions';
 import { runState } from '../state';
+import { getTeammateRng } from '../game/rngUtils';
 
 type Offer = { id: string; label: string; desc: string };
 
@@ -55,10 +56,11 @@ export default class TeammateScene extends Phaser.Scene {
       color: '#cfd2ff'
     });
 
-    // pick 3 random unique relics
+    // pick 3 random unique relics (deterministic based on seed)
     const pool = [...RELICS];
+    const teammateRng = getTeammateRng();
     for (let i = pool.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
+      const j = Math.floor(teammateRng() * (i + 1));
       [pool[i], pool[j]] = [pool[j], pool[i]];
     }
     // Do not allow Sugar Daddy as a free teammate pick
@@ -102,7 +104,7 @@ export default class TeammateScene extends Phaser.Scene {
     };
 
     const rarityById: Record<string, string> = {};
-    for (const r of RELICS) rarityById[r.id] = r.rarity as any;
+    for (const r of RELICS) rarityById[r.id] = r.rarity;
     const rarityColor = (rar: string) => {
       switch (rar) {
         case 'Common': return 0x9aa0a6;   // grey
@@ -158,7 +160,7 @@ export default class TeammateScene extends Phaser.Scene {
       // Center the text vertically within the pill for extra padding
       pillText.setY(pillY + Math.floor((pillH - pillText.height) / 2));
       // Description below icon
-      const descText = this.add.text(0, pillY + pillH + 8, ((RELIC_UI_TEXT as any)[o.id] ?? RELIC_DESCRIPTIONS[o.id] ?? EXTRA_RELIC_DESCRIPTIONS[o.id] ?? ''), {
+      const descText = this.add.text(0, pillY + pillH + 8, (RELIC_UI_TEXT[o.id] ?? RELIC_DESCRIPTIONS[o.id] ?? EXTRA_RELIC_DESCRIPTIONS[o.id] ?? ''), {
         fontFamily: 'LTHoop',
         fontSize: '16px',
         color: '#cfd2ff',

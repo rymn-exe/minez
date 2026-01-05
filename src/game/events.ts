@@ -11,6 +11,24 @@ export enum GameEvent {
   LevelEndResolved = 'onLevelEndResolved'
 }
 
+// Event payload interfaces
+export interface TileRevealedPayload {
+  tile: import('./types').Tile;
+}
+
+export interface GoldGainedPayload {
+  amount: number;
+  source: string;
+}
+
+export interface LifeChangedPayload {
+  delta: number;
+}
+
+export interface LevelEndResolvedPayload {
+  survived: boolean;
+}
+
 export class EventBus {
   private listeners: Map<GameEvent, Set<Listener<any>>> = new Map();
 

@@ -96,7 +96,11 @@ export default class TitleScene extends Phaser.Scene {
         scratchcardStacks: 0,
         optimistUsedThisLevel: false,
         pokerChipUsedThisLevel: false,
-        tarotCard: false
+        tarotCard: false,
+        rerolledThisShop: false,
+        noEndGold: false,
+        atmFee: false,
+        bloodDiamond: false
       };
       runState.stats = {
         revealedCount: 0,
@@ -140,6 +144,11 @@ export default class TitleScene extends Phaser.Scene {
     // Also allow keyboard to start (does not auto-advance)
     this.input.keyboard?.once('keydown-ENTER', beginRun);
     this.input.keyboard?.once('keydown-SPACE', beginRun);
+    
+    // Press 'B' to view button previews
+    this.input.keyboard?.once('keydown-B', () => {
+      this.scene.start('ButtonPreviewScene');
+    });
 
     // Version label (bottom-right) in title font
     {
@@ -153,6 +162,13 @@ export default class TitleScene extends Phaser.Scene {
         }).setOrigin(1, 1).setAlpha(0.9);
       }
     }
+    
+    // Hint to view button previews
+    this.add.text(VIEW_WIDTH / 2, VIEW_HEIGHT - 30, 'Press B to view button styles', {
+      fontFamily: 'LTHoop',
+      fontSize: '12px',
+      color: '#9aa0a6'
+    }).setOrigin(0.5, 1).setAlpha(0.7);
   }
 
   private drawButtonLabel(text: string, rect: Phaser.GameObjects.Rectangle) {

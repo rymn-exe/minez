@@ -1,0 +1,192 @@
+// TileRenderer: Handles tile rendering, animations, and icon management
+// Extracted from GameScene to reduce file size and improve maintainability
+import Phaser from 'phaser';
+import { Board, TileKind, indexAt, neighbors, ChallengeId } from '../../game/types';
+import { GRID_SIZE } from '../../game/consts';
+import { FLAG_COLOR_HEX } from '../gameplay/FlagPaintMode';
+
+const TILE_NORMAL = 0x2a2a34;
+
+export class TileRenderer {
+  private iconImages: Map<number, Phaser.GameObjects.Image> = new Map();
+
+  constructor(
+    private scene: Phaser.Scene,
+    private board: Board,
+    private tiles: Phaser.GameObjects.Rectangle[][],
+    private numbers: Phaser.GameObjects.Text[][],
+    private boardCell: number
+  ) {}
+
+  renderTile(x: number, y: number): void {
+    const idx = indexAt(this.board, x, y);
+    const t = this.board.tiles[idx];
+    const rect = this.tiles[y][x];
+    const label = this.numbers[y][x];
+    
+    // Helper to clear any icon image at this tile
+    const clearIcon = () => {
+      const img = this.iconImages.get(idx);
+      if (img) {
+        img.destroy();
+        this.iconImages.delete(idx);
+      }
+    };
+
+    if (!t.revealed) {
+      // Original solid fill for unrevealed tiles
+      rect.setFillStyle(TILE_NORMAL, 1);
+      if (t.flagged) {
+        label.setText('⚑');
+        const stored = t.flagColor;
+        const css = FLAG_COLOR_HEX[stored ?? 'white'] ?? FLAG_COLOR_HEX.white;
+        label.setColor(css);
+      } else {
+        label.setText('');
+        label.setColor('#d6d6dc');
+      }
+      clearIcon();
+      return;
+    }
+
+    // Revealed styling
+    const revealedAlpha = 0.6;
+    if (t.kind === TileKind.Mine) {
+      rect.setFillStyle(0x1f2430, revealedAlpha);
+      label.setText('💣');
+      clearIcon();
+    } else if (t.kind === TileKind.X) {
+      rect.setFillStyle(0x1e7b4a, revealedAlpha);
+      label.setText('❌');
+      clearIcon();
+    } else if (t.kind === TileKind.Ore) {
+      rect.setFillStyle(0x1f2430, revealedAlpha);
+      // Emoji-only rendering for ore and upgrades
+        label.setText(t.subId === 'Diamond' ? '💎' : '🪙');
+      clearIcon();
+    } else if (t.kind === TileKind.Shop) {
+      rect.setFillStyle(0x1f2430, revealedAlpha);
+      // Emoji-only rendering for shop tiles
+      label.setText(this.shopIcon(t.subId, t.compassDir));
+      clearIcon();
+    } else if (t.kind === TileKind.Challenge) {
+      rect.setFillStyle(0x1f2430, revealedAlpha);
+      // Emoji-only rendering for challenges
+      label.setText(this.challengeIcon(t.subId));
+      clearIcon();
+    } else if (t.kind === TileKind.Safe) {
+      rect.setFillStyle(0x1f2430, revealedAlpha);
+      // Persistent frontier masking:
+      // If a revealed 0-tile ever borders an unrevealed neighbor, mark it to always display '?'
+      if (t.number === 0) {
+        const hasUnrevealedNeighbor = neighbors(this.board, x, y).some(p => {
+          const nt = this.board.tiles[indexAt(this.board, p.x, p.y)];
+          return !nt.revealed;
+        });
+        if (hasUnrevealedNeighbor && t.subId !== 'FrontierQuestion') {
+          t.subId = 'FrontierQuestion';
+        }
+        label.setText(t.subId === 'FrontierQuestion' ? '?' : '');
+      } else {
+        label.setText('');
+      }
+      clearIcon();
+    } else if (t.kind === TileKind.Number) {
+      rect.setFillStyle(0x1f2430, revealedAlpha);
+      const masked = t.mathMasked || t.randomMasked;
+      if (masked) {
+        label.setText('?');
+      } else {
+        label.setText(String(t.number));
+      }
+      clearIcon();
+    }
+  }
+
+  renderAll(): void {
+    for (let y = 0; y < GRID_SIZE; y++) {
+      for (let x = 0; x < GRID_SIZE; x++) {
+        this.renderTile(x, y);
+      }
+    }
+  }
+
+  animateFlip(x: number, y: number): void {
+    const rect = this.tiles[y][x];
+    const label = this.numbers[y][x];
+    // Guard against missing objects (shouldn't happen)
+    if (!rect || !label) return;
+    
+    // First half: scaleX to 0
+    this.scene.tweens.add({
+      targets: [rect, label],
+      scaleX: 0,
+      duration: 90,
+      ease: 'Sine.easeIn',
+      onComplete: () => {
+        // Swap to revealed visuals
+        this.renderTile(x, y);
+        // If an icon image was created during render, include it in the second half
+        const idx = indexAt(this.board, x, y);
+        const img = this.iconImages.get(idx);
+        if (img) img.setScale(0, img.scaleY);
+        // Second half: expand back to 1
+        const targets: any[] = [rect, label];
+        if (img) targets.push(img);
+        this.scene.tweens.add({
+          targets,
+          scaleX: 1,
+          duration: 90,
+          ease: 'Sine.easeOut'
+        });
+      }
+    });
+  }
+
+  private shopIcon(subId?: string, compassDir?: string): string {
+    switch (subId) {
+      case 'Diamond': return '💎';
+      case '1Up': return '❤️';
+      case 'Pickaxe': return '🪓';
+      case 'Compass': return compassDir ? compassDir : '🧭';
+      case 'Scratchcard': return '🎟️';
+      case 'GoodDeal': return '👍';
+      case 'RemoteControl': return '📺';
+      case 'AdvancePayment': return '💳';
+      case 'Quartz': return '⚪';
+      case 'Receipt': return '🧾';
+      case '2Up': return '💞';
+      case 'LuckyCat': return '🐈‍⬛';
+      case 'TarotCard': return '🪬';
+      case 'MetalDetector': return '🔎';
+      case 'LaundryMoney': return '🧼';
+      default: return '🟣';
+    }
+  }
+
+  private challengeIcon(subId?: string): string {
+    switch (subId) {
+      case ChallengeId.AutoGrat: return '💸';
+      case ChallengeId.Stopwatch: return '⏱️';
+      case ChallengeId.MathTest: return '☠️';
+      case ChallengeId.BadDeal: return '💱';
+      case ChallengeId.Clover2: return '🍀';
+      case ChallengeId.SnakeOil: return '🧴';
+      case ChallengeId.SnakeVenom: return '🐍';
+      case ChallengeId.BloodPact: return '🩸';
+      case ChallengeId.CarLoan: return '🚗';
+      case ChallengeId.BloodDiamond: return '🔻';
+      case ChallengeId.FindersFee: return '🫴';
+      case ChallengeId.ATMFee: return '🏧';
+      case ChallengeId.Coal: return '🪨';
+      case ChallengeId.BoxingDay: return '🥊';
+      default: return '🟠';
+    }
+  }
+
+  cleanup(): void {
+    this.iconImages.forEach(img => img.destroy());
+    this.iconImages.clear();
+  }
+}
+

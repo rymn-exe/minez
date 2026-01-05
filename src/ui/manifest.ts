@@ -275,7 +275,7 @@ export class ManifestPanel {
         el.on?.('pointerover', () => {
           if (hoverId?.kind === 'shop' && hoverId.id) {
             const name = shopLabelById[hoverId.id] ?? hoverId.id;
-            const desc = (TILE_UI_TEXT as any)[hoverId.id] ?? (TILE_DESCRIPTIONS as any)[hoverId.id] ?? (EXTRA_TILE_DESCRIPTIONS as any)[hoverId.id] ?? '';
+            const desc = TILE_UI_TEXT[hoverId.id] ?? TILE_DESCRIPTIONS[hoverId.id] ?? EXTRA_TILE_DESCRIPTIONS[hoverId.id] ?? '';
             if (this.hoverProxy) this.hoverProxy(name, goodColor, desc); else this.showTooltip(name, goodColor, desc);
           } else if (hoverId?.kind === 'builtinGood') {
             const name = labelText;
@@ -283,7 +283,7 @@ export class ManifestPanel {
             if (this.hoverProxy) this.hoverProxy(name, goodColor, desc); else this.showTooltip(name, goodColor, desc);
           } else if (hoverId?.kind === 'challenge' && hoverId.id) {
             const name = challengeLabel(hoverId.id);
-            const desc = (CHALLENGE_UI_TEXT as any)[hoverId.id] ?? CHALLENGE_DESCRIPTIONS[hoverId.id] ?? '';
+            const desc = CHALLENGE_UI_TEXT[hoverId.id] ?? CHALLENGE_DESCRIPTIONS[hoverId.id] ?? '';
             if (this.hoverProxy) this.hoverProxy(name, badColor, desc); else this.showTooltip(name, badColor, desc);
     } else {
             const name = labelText;
@@ -300,14 +300,14 @@ export class ManifestPanel {
       const regionOver = () => {
         if (hoverId?.kind === 'shop' && hoverId.id) {
           const name = shopLabelById[hoverId.id] ?? hoverId.id;
-          const desc = (TILE_UI_TEXT as any)[hoverId.id] ?? (TILE_DESCRIPTIONS as any)[hoverId.id] ?? (EXTRA_TILE_DESCRIPTIONS as any)[hoverId.id] ?? '';
+          const desc = TILE_UI_TEXT[hoverId.id] ?? TILE_DESCRIPTIONS[hoverId.id] ?? EXTRA_TILE_DESCRIPTIONS[hoverId.id] ?? '';
           if (this.hoverProxy) this.hoverProxy(name, goodColor, desc); else this.showTooltip(name, goodColor, desc);
         } else if (hoverId?.kind === 'builtinGood') {
           const desc = labelText.includes('Ore') ? 'Reveals gold when opened' : 'Exit tile; proceed after reveal';
           if (this.hoverProxy) this.hoverProxy(labelText, goodColor, desc); else this.showTooltip(labelText, goodColor, desc);
         } else if (hoverId?.kind === 'challenge' && hoverId.id) {
           const name = challengeLabel(hoverId.id);
-          const desc = (CHALLENGE_UI_TEXT as any)[hoverId.id] ?? CHALLENGE_DESCRIPTIONS[hoverId.id] ?? '';
+          const desc = CHALLENGE_UI_TEXT[hoverId.id] ?? CHALLENGE_DESCRIPTIONS[hoverId.id] ?? '';
           if (this.hoverProxy) this.hoverProxy(name, badColor, desc); else this.showTooltip(name, badColor, desc);
         } else {
           if (this.hoverProxy) this.hoverProxy(labelText, '#e9e9ef', ''); else this.showTooltip(labelText, '#e9e9ef', '');
@@ -349,7 +349,7 @@ export class ManifestPanel {
         const countSuffix = n > 1 ? ` ×${n}` : '';
         const txt = this.scene.add.text(this.x + 12, cursorY, `${relicLabelById[id] ?? id}${countSuffix}`, { fontFamily: 'LTHoop', fontSize: '14px', color: '#e9e9ef' }).setOrigin(0, 0).setDepth(20);
         txt.setInteractive({ useHandCursor: true });
-        const desc = (RELIC_UI_TEXT as any)[id] ?? (RELIC_DESCRIPTIONS as any)[id] ?? (EXTRA_RELIC_DESCRIPTIONS as any)[id] ?? '';
+        const desc = RELIC_UI_TEXT[id] ?? RELIC_DESCRIPTIONS[id] ?? EXTRA_RELIC_DESCRIPTIONS[id] ?? '';
         txt.on('pointerover', () => {
           const name = relicLabelById[id] ?? id;
           if (this.hoverProxy) this.hoverProxy(name, '#7dd3fc', desc);

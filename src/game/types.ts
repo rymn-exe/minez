@@ -39,6 +39,9 @@ export interface Tile {
   number: number;
   subId?: string; // Shop or Challenge specific id
   compassDir?: '↑' | '↓' | '←' | '→';
+  // Visual masking properties (for UI rendering only, doesn't affect game logic)
+  mathMasked?: boolean; // Math Test: numbers >1 show as '?'
+  randomMasked?: boolean; // Random 20% chance to show number as '?'
 }
 
 export interface Board {

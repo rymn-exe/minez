@@ -5,6 +5,10 @@ import { ECONOMY } from '../game/consts';
 // Internal identifiers remain RELIC_* and offer.type 'relic' for compatibility.
 import { TILE_DESCRIPTIONS, RELIC_DESCRIPTIONS, EXTRA_RELIC_DESCRIPTIONS, EXTRA_TILE_DESCRIPTIONS, RELIC_UI_TEXT, TILE_UI_TEXT } from '../game/descriptions';
 import { SHOP_TILES, RELICS, priceForRarity } from '../game/items';
+import { getShopRng } from '../game/rngUtils';
+import { pickRandom } from '../game/rng';
+import { ServiceRenderer } from './shop/ServiceRenderer';
+import { OfferRenderer } from './shop/OfferRenderer';
 
 type Offer = { type: 'tile' | 'relic' | 'service'; id: string; price: number; label: string };
 
@@ -13,14 +17,10 @@ export default class ShopScene extends Phaser.Scene {
   private hoverDescText!: Phaser.GameObjects.Text;
   private hoverNameText!: Phaser.GameObjects.Text;
   private titleText!: Phaser.GameObjects.Text;
-  private offerEntries: { offer: Offer; priceText: Phaser.GameObjects.Text }[] = [];
   private purchasedIds: Set<string> = new Set();
   private servicePurchased: Set<string> = new Set();
-  private svcY: number = 0;
-  private svcRefs: Record<string, { bg: Phaser.GameObjects.GameObject; icon: Phaser.GameObjects.GameObject; priceText: Phaser.GameObjects.Text; coin?: Phaser.GameObjects.GameObject }> = {};
-  private svcTop: number = 0;
-  private svcPriceY: number = 0;
-  private svcIconY: number = 0;
+  private serviceRenderer!: ServiceRenderer;
+  private offerRenderer!: OfferRenderer;
   // Stats pill number refs (match right panel style)
   private shopLivesNum?: Phaser.GameObjects.Text;
   private shopCoinsNum?: Phaser.GameObjects.Text;
@@ -115,12 +115,34 @@ export default class ShopScene extends Phaser.Scene {
     // Reset per-session state so previous shops don't bleed into new ones
     this.purchasedIds = new Set();
     this.servicePurchased = new Set();
-    this.offerEntries = [];
+    
+    // Initialize renderers
+    this.serviceRenderer = new ServiceRenderer(
+      this,
+      (id: string) => this.iconFor(id),
+      (x: number, y: number, radius?: number) => this.drawCoin(x, y, radius),
+      (name: string, kind: 'service', desc: string) => this.setHover(name, kind, desc),
+      () => this.clearHover(),
+      (offer: any) => this.purchase(offer),
+      this.servicePurchased,
+      this.shopLivesNum,
+      this.shopCoinsNum
+    );
+    this.offerRenderer = new OfferRenderer(
+      this,
+      (id: string) => this.iconFor(id),
+      (label: string) => this.displayName(label),
+      (x: number, y: number, radius?: number) => this.drawCoin(x, y, radius),
+      (offer: Offer) => this.effectivePrice(offer),
+      (name: string, kind: 'tile' | 'relic' | 'service', desc: string) => this.setHover(name, kind, desc),
+      () => this.clearHover(),
+      (offer: Offer) => this.purchaseAndRefresh(offer)
+    );
     // If the shop has already been rerolled once this session and the player
     // does NOT own Gamer, pre-mark Reroll as SOLD after the restart
     {
       const hasGamer = ((runState.ownedRelics['Gamer'] ?? 0) > 0);
-      const rerolled = !!((runState.persistentEffects as any).rerolledThisShop);
+      const rerolled = runState.persistentEffects.rerolledThisShop;
       if (rerolled && !hasGamer) {
         this.servicePurchased.add('Reroll');
       }
@@ -189,11 +211,13 @@ export default class ShopScene extends Phaser.Scene {
     }
 
     // Simple deterministic selection by seed and level
+    const shopRng = getShopRng();
     function pickN<T>(pool: T[], n: number): T[] {
       const copy = pool.slice();
       const out: T[] = [];
       while (out.length < n && copy.length) {
-        const idx = Math.floor(Math.random() * copy.length);
+        const picked = pickRandom(shopRng, copy);
+        const idx = copy.indexOf(picked);
         out.push(copy.splice(idx, 1)[0]);
       }
       return out;
@@ -225,12 +249,12 @@ export default class ShopScene extends Phaser.Scene {
     // Tiles row (full width)
     const tilesTitleBottom = this.drawHeader(margin, tilesHeaderTop, fullW, 'Tiles', '#a78bfa');
     const tilesCols = Math.max(1, tileOffers.length); // one centered row like prototype
-    this.renderOffersGrid(tileOffers, margin, tilesTitleBottom, fullW, tilesCols, colGap, rowGap);
+    this.offerRenderer.renderOffersGrid(tileOffers, margin, tilesTitleBottom, fullW, tilesCols, colGap, rowGap);
 
     // Collectibles row (full width)
     const relicsTitleBottom = this.drawHeader(margin, collectiblesHeaderTop, fullW, 'Collectibles', '#7dd3fc');
     const relicCols = Math.max(1, relicOffers.length);
-    this.renderOffersGrid(relicOffers, margin, relicsTitleBottom, fullW, relicCols, colGap, rowGap);
+    this.offerRenderer.renderOffersGrid(relicOffers, margin, relicsTitleBottom, fullW, relicCols, colGap, rowGap);
 
     // Footer hover text area (transparent so hover text appears to float)
     this.add.rectangle(margin, hoverY, hoverW, hoverH, 0x000000, 0).setOrigin(0, 0);
@@ -254,56 +278,8 @@ export default class ShopScene extends Phaser.Scene {
     const svcGapX = 80;
     const totalW = 2 * svcColW + svcGapX;
     const servicesX = Math.floor(this.scale.width / 2 - totalW / 2);
-    const drawServiceCard = (x: number, id: 'Reroll' | 'BuyLife', price: number, hover: string) => {
-      const emoji = this.iconFor(id);
-      const centerX = x + svcColW / 2;
-      // Invisible interaction zone instead of a visible box
-      const bg = this.add.zone(centerX, svcTop + 28, svcColW, 70).setOrigin(0.5).setInteractive({ useHandCursor: true });
-      const icon = this.add.text(centerX, svcTop, emoji, { fontFamily: 'LTHoop', fontSize: '34px', color: '#e9e9ef' }).setOrigin(0.5, 0);
-      // Centered price group, nudged lower to avoid overlap with headers
-      const prStr = `${price}`;
-      const priceBaseY = svcTop + 44;
-      const pText = this.add.text(0, priceBaseY, prStr, { fontFamily: 'LTHoop', fontSize: '18px', fontStyle: 'bold', color: '#e9e9ef' }).setOrigin(0, 0.5);
-      const grpW = 7 * 2 + 4 + pText.width;
-      const left = centerX - grpW / 2;
-      const svcCoin = this.drawCoin(left + 7, priceBaseY, 7);
-      pText.setX(left + 7 * 2 + 4);
-      const priceText = pText;
-      // keep refs for targeted updates
-      this.svcRefs[id] = { bg, icon, priceText, coin: svcCoin };
-      const click = () => {
-        if (this.servicePurchased.has(id)) return;
-        const fake: any = { type: 'service', id, price, label: id };
-        this.purchase(fake);
-        this.servicePurchased.add(id);
-        // Mark this service card SOLD and disable interactivity
-        icon.setText('SOLD');
-        priceText.setText('');
-        if (svcCoin) svcCoin.setVisible(false);
-        (bg as any).disableInteractive?.();
-        (icon as any).disableInteractive?.();
-        (priceText as any).disableInteractive?.();
-        this.shopLivesNum?.setText(String(runState.lives));
-        this.shopCoinsNum?.setText(String(runState.gold));
-      };
-      [bg, icon, priceText, svcCoin].forEach(el =>
-        (el as any).setInteractive?.({ useHandCursor: true })
-          .on?.('pointerdown', click)
-          .on?.('pointerover', () => this.setHover(id === 'Reroll' ? 'Reroll' : 'Buy Life', 'service', hover))
-          .on?.('pointerout', () => this.clearHover())
-      );
-      // If already flagged as purchased, render SOLD immediately
-      if (this.servicePurchased.has(id)) {
-        icon.setText('SOLD');
-        priceText.setText('');
-        if (svcCoin) svcCoin.setVisible(false);
-        (bg as any).disableInteractive?.();
-        (icon as any).disableInteractive?.();
-        (priceText as any).disableInteractive?.();
-      }
-    };
-    drawServiceCard(servicesX, 'Reroll', 2, 'Reroll the shop');
-    drawServiceCard(servicesX + svcColW + svcGapX, 'BuyLife', 3, 'Buy a life');
+    this.serviceRenderer.drawServiceCard(servicesX, 'Reroll', 2, 'Reroll the shop', svcTop, svcColW);
+    this.serviceRenderer.drawServiceCard(servicesX + svcColW + svcGapX, 'BuyLife', 3, 'Buy a life', svcTop, svcColW);
 
     // Proceed bottom-right (semi-transparent rounded button with LTHoop font)
     // Position proceed button ABOVE the hover bar so it doesn't overlap
@@ -346,90 +322,6 @@ export default class ShopScene extends Phaser.Scene {
     }
   }
 
-  // Grid renderer (n columns, wraps as needed)
-  private renderOffersGrid(offers: Offer[], startX: number, startY: number, boxWidth: number, cols: number, colGap: number, rowGap: number): number {
-    let x = startX;
-    let y = startY;
-    let col = 0;
-    const cardW = Math.floor((boxWidth - (cols - 1) * colGap) / cols);
-    const cardH = 88;
-    offers.forEach((offer) => {
-      this.renderOfferCard(offer, x, y, cardW, cardH);
-      col++;
-      if (col >= cols) {
-        col = 0;
-        x = startX;
-        y += cardH + rowGap;
-      } else {
-        x += cardW + colGap;
-      }
-    });
-    return y + cardH;
-  }
-
-  // Single offer entry – large icon with name and price beneath (no outer card)
-  private renderOfferCard(offer: Offer, x: number, y: number, w: number, h: number) {
-    const centerX = x + Math.floor(w / 2);
-    const topY = y + 6;
-    const iconBoxSize = 64;
-    const iconTop = topY;
-
-    // Hover description (compute once)
-    const desc = offer.type === 'tile'
-      ? ((TILE_UI_TEXT as any)[offer.id] ?? (TILE_DESCRIPTIONS as any)[offer.id] ?? (EXTRA_TILE_DESCRIPTIONS as any)[offer.id] ?? '')
-      : offer.type === 'relic'
-        ? ((RELIC_UI_TEXT as any)[offer.id] ?? RELIC_DESCRIPTIONS[offer.id] ?? EXTRA_RELIC_DESCRIPTIONS[offer.id] ?? '')
-        : (offer.id === 'BuyLife' ? 'Buy a life' : 'Reroll the shop');
-
-    // Icon tile (square behind the emoji) – only for Tiles
-    const iconTile = (offer.type === 'tile')
-      ? this.add.rectangle(centerX - iconBoxSize / 2, iconTop, iconBoxSize, iconBoxSize, 0x22232a, 1)
-          .setOrigin(0, 0)
-          .setStrokeStyle(1, 0x2e2e39)
-      : null;
-    // Icon (emoji only)
-    let iconObj: Phaser.GameObjects.GameObject | null = null;
-    {
-      const emoji = this.iconFor(offer.id);
-      iconObj = this.add.text(centerX, iconTop + iconBoxSize / 2, emoji, { fontFamily: 'LTHoop, "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif', fontSize: '38px', color: '#e9e9ef' }).setOrigin(0.5, 0.5);
-    }
-    ;[iconTile, iconObj].filter(Boolean).forEach(el => (el as any).setInteractive({ useHandCursor: true })
-      .on('pointerdown', () => this.purchaseAndRefresh(offer))
-      .on('pointerover', () => {
-        if (iconObj) this.tweens.add({ targets: iconObj, scale: 1.04, duration: 120, ease: 'Quad.easeOut' });
-        this.setHover(offer.label, offer.type, desc);
-      })
-      .on('pointerout', () => {
-        if (iconObj) this.tweens.add({ targets: iconObj, scale: 1.0, duration: 120, ease: 'Quad.easeOut' });
-        this.clearHover();
-      }));
-    // Name
-    const name = this.displayName(offer.label);
-    const nameText = this.add.text(centerX, iconTop + iconBoxSize + 6, name, { fontFamily: 'LTHoop', fontSize: '18px', color: '#e9e9ef' }).setOrigin(0.5, 0);
-    nameText.setInteractive({ useHandCursor: true })
-      .on('pointerover', () => this.setHover(offer.label, offer.type, desc))
-      .on('pointerout', () => this.clearHover())
-      .on('pointerdown', () => this.purchaseAndRefresh(offer));
-    // Price
-    const priceY = iconTop + iconBoxSize + 28;
-    const coinR = 7;
-    const priceStr = `${this.effectivePrice(offer)}`;
-    const priceText = this.add.text(0, priceY + 8, priceStr, { fontFamily: 'LTHoop', fontSize: '18px', fontStyle: 'bold', color: '#e9e9ef' }).setOrigin(0, 0.5);
-    const groupWidth = coinR * 2 + 4 + priceText.width;
-    const groupLeft = centerX - groupWidth / 2;
-    const coin = this.drawCoin(groupLeft + coinR, priceY + 8, coinR);
-    priceText.setX(groupLeft + coinR * 2 + 4);
-    priceText.setInteractive({ useHandCursor: true })
-      .on('pointerover', () => this.setHover(offer.label, offer.type, desc))
-      .on('pointerout', () => this.clearHover())
-      .on('pointerdown', () => this.purchaseAndRefresh(offer));
-    coin.setInteractive({ useHandCursor: true })
-      .on('pointerover', () => this.setHover(offer.label, offer.type, desc))
-      .on('pointerout', () => this.clearHover())
-      .on('pointerdown', () => this.purchaseAndRefresh(offer));
-    // Track for price refresh
-    this.offerEntries.push({ offer, priceText });
-  }
 
   private effectivePrice(offer: Offer): number {
     const base = Math.max(0, offer.price - (runState.ownedRelics['Couponer'] ?? 0));
@@ -440,15 +332,7 @@ export default class ShopScene extends Phaser.Scene {
     // Flag so future clicks are blocked and future renders are SOLD
     this.servicePurchased.add('Reroll');
     // Target only the Reroll service UI; do not touch item prices
-    const ref = this.svcRefs['Reroll'];
-    if (ref) {
-      (ref.icon as any).setText('SOLD');
-      ref.priceText.setText('');
-      (ref.bg as any).disableInteractive?.();
-      (ref.icon as any).disableInteractive?.();
-      (ref.priceText as any).disableInteractive?.();
-      if (ref.coin) (ref.coin as any).setVisible(false);
-    }
+    this.serviceRenderer.markRerollSold();
   }
 
   private purchaseAndRefresh(offer: Offer) {
@@ -459,10 +343,10 @@ export default class ShopScene extends Phaser.Scene {
     }
     // Check affordability before attempting purchase (respecting coupon/ATM fee)
     const base = Math.max(0, offer.price - (runState.ownedRelics['Couponer'] ?? 0));
-    const totalCost = base + (base > 0 && (runState.persistentEffects as any).atmFee ? 1 : 0);
+    const totalCost = base + (base > 0 && runState.persistentEffects.atmFee ? 1 : 0);
     if (offer.type !== 'service' && totalCost > runState.gold) {
       // Not affordable: give quick visual feedback on the card price
-      const entry = this.offerEntries.find(e => e.offer === offer);
+      const entry = this.offerRenderer.getOfferEntries().find(e => e.offer === offer);
       if (entry?.priceText) {
         const originalColor = (entry.priceText as any).style?.color || '#e9e9ef';
         entry.priceText.setColor('#fca5a5');
@@ -485,12 +369,12 @@ export default class ShopScene extends Phaser.Scene {
     }
     if (offer.type !== 'service') {
       this.purchasedIds.add(offer.id);
-      const entry = this.offerEntries.find(e => e.offer === offer);
+      const entry = this.offerRenderer.getOfferEntries().find(e => e.offer === offer);
       if (entry) {
         entry.priceText.setText('SOLD');
         (entry.priceText as any).disableInteractive?.();
       }
-    this.refreshAllPriceLabels();
+      this.refreshAllPriceLabels();
     }
     this.shopLivesNum?.setText(String(runState.lives));
     this.shopCoinsNum?.setText(String(runState.gold));
@@ -510,7 +394,7 @@ export default class ShopScene extends Phaser.Scene {
   }
 
   private refreshAllPriceLabels() {
-    for (const entry of this.offerEntries) {
+    for (const entry of this.offerRenderer.getOfferEntries()) {
       if (this.purchasedIds.has(entry.offer.id)) {
         entry.priceText.setText('SOLD');
       } else {
@@ -539,7 +423,7 @@ export default class ShopScene extends Phaser.Scene {
       runState.shopFreePurchases -= 1;
     }
     // Affordability check must include ATM Fee surcharge (if any)
-    const atmExtra = finalPrice > 0 && (runState.persistentEffects as any).atmFee ? 1 : 0;
+    const atmExtra = finalPrice > 0 && runState.persistentEffects.atmFee ? 1 : 0;
     const totalCost = finalPrice + atmExtra;
     if (runState.gold < totalCost) return;
     if (totalCost > 0) {
@@ -568,7 +452,7 @@ export default class ShopScene extends Phaser.Scene {
       }
       if (offer.id === 'Reroll') {
         // Record that we've used our one reroll for this shop (unless Gamer)
-        (runState.persistentEffects as any).rerolledThisShop = true;
+        runState.persistentEffects.rerolledThisShop = true;
         // Restart scene to regenerate offers cleanly
         this.scene.restart();
         return;

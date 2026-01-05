@@ -219,9 +219,9 @@ export function generateLevel(width: number, height: number): GenerationResult {
   // Car Loan should apply from level start if present on the board
   runState.persistentEffects.carLoan = (runState.stats.challengeCounts[ChallengeId.CarLoan] ?? 0) > 0;
   // Reset per-level toggles
-  (runState.persistentEffects as any).noEndGold = false;
-  (runState.persistentEffects as any).atmFee = (runState.stats.challengeCounts[ChallengeId.ATMFee] ?? 0) > 0 ? true : false;
-  (runState.persistentEffects as any).bloodDiamond = (runState.stats.challengeCounts[ChallengeId.BloodDiamond] ?? 0) > 0 ? true : false;
+  runState.persistentEffects.noEndGold = false;
+  runState.persistentEffects.atmFee = (runState.stats.challengeCounts[ChallengeId.ATMFee] ?? 0) > 0;
+  runState.persistentEffects.bloodDiamond = (runState.stats.challengeCounts[ChallengeId.BloodDiamond] ?? 0) > 0;
   runState.persistentEffects.tarotCard = false;
 
   return { board };

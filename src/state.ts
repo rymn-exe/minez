@@ -22,6 +22,10 @@ export interface RunState {
     optimistUsedThisLevel: boolean;
     pokerChipUsedThisLevel: boolean;
     tarotCard: boolean;
+    rerolledThisShop: boolean;
+    noEndGold: boolean;
+    atmFee: boolean;
+    bloodDiamond: boolean;
   };
   stats: {
     revealedCount: number;
@@ -38,6 +42,9 @@ export interface RunState {
 }
 
 export const runState: RunState = {
+  // Initial seed generation: random for new runs, but can be set for replay/debugging
+  // Note: This Math.random() is intentional - initial seed should be random for new runs
+  // For deterministic replay, set runState.seed manually before starting
   seed: Math.floor(Math.random() * 2 ** 31),
   rngState: 0,
   level: 1,
@@ -57,7 +64,11 @@ export const runState: RunState = {
     scratchcardStacks: 0,
     optimistUsedThisLevel: false,
     pokerChipUsedThisLevel: false,
-    tarotCard: false
+    tarotCard: false,
+    rerolledThisShop: false,
+    noEndGold: false,
+    atmFee: false,
+    bloodDiamond: false
   },
   stats: {
     revealedCount: 0,
