@@ -41,28 +41,37 @@ export class ServiceRenderer {
     const bg = this.scene.add.zone(centerX, svcTop + 28, svcColW, 70).setOrigin(0.5).setInteractive({ useHandCursor: true });
     const icon = this.scene.add.text(centerX, svcTop, emoji, { fontFamily: 'LTHoop', fontSize: '34px', color: '#e9e9ef' }).setOrigin(0.5, 0);
     // Centered price group, nudged lower to avoid overlap with headers
-    const prStr = `${price}`;
+    // Display price (Barterer + free purchase credit)
+    const hasBarterer = (runState.ownedRelics['Barterer'] ?? 0) > 0;
+    const discounted = Math.max(0, price - (hasBarterer ? (runState.ownedRelics['Barterer'] ?? 0) : 0));
+    const displayPrice = runState.shopFreePurchases > 0 ? 0 : discounted;
+    const prStr = `${displayPrice}`;
     const priceBaseY = svcTop + 44;
     const pText = this.scene.add.text(0, priceBaseY, prStr, { fontFamily: 'LTHoop', fontSize: '18px', fontStyle: 'bold', color: '#e9e9ef' }).setOrigin(0, 0.5);
     const grpW = 7 * 2 + 4 + pText.width;
     const left = centerX - grpW / 2;
     const svcCoin = this.drawCoin(left + 7, priceBaseY, 7);
+    if (displayPrice <= 0) (svcCoin as any).setVisible?.(false);
     pText.setX(left + 7 * 2 + 4);
     const priceText = pText;
     // keep refs for targeted updates
     this.svcRefs[id] = { bg, icon, priceText, coin: svcCoin };
     const click = () => {
+      const hasSurgeon = ((runState.ownedRelics['Surgeon'] ?? 0) > 0);
       if (this.servicePurchased.has(id)) return;
       const fake: any = { type: 'service', id, price, label: id };
       this.purchase(fake);
-      this.servicePurchased.add(id);
-      // Mark this service card SOLD and disable interactivity
-      icon.setText('SOLD');
-      priceText.setText('');
-      if (svcCoin) (svcCoin as any).setVisible?.(false);
-      (bg as any).disableInteractive?.();
-      (icon as any).disableInteractive?.();
-      (priceText as any).disableInteractive?.();
+      // Surgeon: Buy Life can be purchased repeatedly (do not mark SOLD)
+      if (!(id === 'BuyLife' && hasSurgeon)) {
+        this.servicePurchased.add(id);
+        // Mark this service card SOLD and disable interactivity
+        icon.setText('SOLD');
+        priceText.setText('');
+        if (svcCoin) (svcCoin as any).setVisible?.(false);
+        (bg as any).disableInteractive?.();
+        (icon as any).disableInteractive?.();
+        (priceText as any).disableInteractive?.();
+      }
       this.shopLivesNum?.setText(String(runState.lives));
       this.shopCoinsNum?.setText(String(runState.gold));
     };

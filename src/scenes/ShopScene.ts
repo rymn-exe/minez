@@ -62,6 +62,10 @@ export default class ShopScene extends Phaser.Scene {
       TarotCard: '🪬',
       MetalDetector: '🔎',
       LaundryMoney: '🧼',
+      CheatSheet: '📄',
+      PokerChip: '🃏',
+      LuckyPenny: '🧧',
+      NineToFive: '🏢',
       // Relics
       Vexillologist: '🏁',
       Pioneer: '🥾',
@@ -88,6 +92,10 @@ export default class ShopScene extends Phaser.Scene {
       SugarDaddy: '🎁',
       FortuneTeller: '🔮',
       Gamer: '🎮',
+      Philanthropist: '🤲',
+      Barterer: '🔄',
+      Surgeon: '🩺',
+      SalesAssociate: '👗',
       // Services
       Reroll: '🎲',
       BuyLife: '❤️'
@@ -115,29 +123,7 @@ export default class ShopScene extends Phaser.Scene {
     // Reset per-session state so previous shops don't bleed into new ones
     this.purchasedIds = new Set();
     this.servicePurchased = new Set();
-    
-    // Initialize renderers
-    this.serviceRenderer = new ServiceRenderer(
-      this,
-      (id: string) => this.iconFor(id),
-      (x: number, y: number, radius?: number) => this.drawCoin(x, y, radius),
-      (name: string, kind: 'service', desc: string) => this.setHover(name, kind, desc),
-      () => this.clearHover(),
-      (offer: any) => this.purchase(offer),
-      this.servicePurchased,
-      this.shopLivesNum,
-      this.shopCoinsNum
-    );
-    this.offerRenderer = new OfferRenderer(
-      this,
-      (id: string) => this.iconFor(id),
-      (label: string) => this.displayName(label),
-      (x: number, y: number, radius?: number) => this.drawCoin(x, y, radius),
-      (offer: Offer) => this.effectivePrice(offer),
-      (name: string, kind: 'tile' | 'relic' | 'service', desc: string) => this.setHover(name, kind, desc),
-      () => this.clearHover(),
-      (offer: Offer) => this.purchaseAndRefresh(offer)
-    );
+
     // If the shop has already been rerolled once this session and the player
     // does NOT own Gamer, pre-mark Reroll as SOLD after the restart
     {
@@ -145,6 +131,14 @@ export default class ShopScene extends Phaser.Scene {
       const rerolled = runState.persistentEffects.rerolledThisShop;
       if (rerolled && !hasGamer) {
         this.servicePurchased.add('Reroll');
+      }
+    }
+    // If Buy Life was already purchased this shop and the player does NOT own Surgeon, mark SOLD
+    {
+      const hasSurgeon = ((runState.ownedRelics['Surgeon'] ?? 0) > 0);
+      const bought = (runState.persistentEffects as any).buyLifeBoughtThisShop;
+      if (bought && !hasSurgeon) {
+        this.servicePurchased.add('BuyLife');
       }
     }
     this.cameras.main.setBackgroundColor('#14141c');
@@ -189,6 +183,29 @@ export default class ShopScene extends Phaser.Scene {
       const right1 = drawPill('❤️', runState.lives, startX, 'lives');
       drawPill('🟡', runState.gold, right1 + 22, 'coins');
     }
+
+    // Initialize renderers AFTER pills so service purchases can update these numbers immediately.
+    this.serviceRenderer = new ServiceRenderer(
+      this,
+      (id: string) => this.iconFor(id),
+      (x: number, y: number, radius?: number) => this.drawCoin(x, y, radius),
+      (name: string, kind: 'service', desc: string) => this.setHover(name, kind, desc),
+      () => this.clearHover(),
+      (offer: any) => this.purchase(offer),
+      this.servicePurchased,
+      this.shopLivesNum,
+      this.shopCoinsNum
+    );
+    this.offerRenderer = new OfferRenderer(
+      this,
+      (id: string) => this.iconFor(id),
+      (label: string) => this.displayName(label),
+      (x: number, y: number, radius?: number) => this.drawCoin(x, y, radius),
+      (offer: Offer) => this.effectivePrice(offer),
+      (name: string, kind: 'tile' | 'relic' | 'service', desc: string) => this.setHover(name, kind, desc),
+      () => this.clearHover(),
+      (offer: Offer) => this.purchaseAndRefresh(offer)
+    );
 
     // Generate offers (v2 pools)
     const shopPool: Offer[] = SHOP_TILES.map(t => ({
@@ -316,7 +333,10 @@ export default class ShopScene extends Phaser.Scene {
         runState.persistentEffects.snakeOil = false;
         runState.persistentEffects.mathTest = false;
         runState.persistentEffects.snakeVenom = { active: false, revealsUntilHit: 8 };
-        this.scene.start('GameScene');
+        runState.persistentEffects.donationBoxStacks = 0;
+        runState.persistentEffects.appraisal = false;
+        // Draft a challenge for the upcoming level
+        this.scene.start('ChallengeScene');
       });
       // Keep label above the graphics; zone is invisible and captures input
     }
@@ -324,7 +344,15 @@ export default class ShopScene extends Phaser.Scene {
 
 
   private effectivePrice(offer: Offer): number {
-    const base = Math.max(0, offer.price - (runState.ownedRelics['Couponer'] ?? 0));
+    let base = offer.price;
+    // Couponer affects items only (not services)
+    if (offer.type !== 'service') {
+      base = Math.max(0, base - (runState.ownedRelics['Couponer'] ?? 0));
+    }
+    // Barterer affects services only
+    if (offer.type === 'service') {
+      base = Math.max(0, base - (runState.ownedRelics['Barterer'] ?? 0));
+    }
     return runState.shopFreePurchases > 0 ? 0 : base;
   }
 
@@ -342,7 +370,9 @@ export default class ShopScene extends Phaser.Scene {
       return;
     }
     // Check affordability before attempting purchase (respecting coupon/ATM fee)
-    const base = Math.max(0, offer.price - (runState.ownedRelics['Couponer'] ?? 0));
+    const base = offer.type === 'service'
+      ? Math.max(0, offer.price - (runState.ownedRelics['Barterer'] ?? 0))
+      : Math.max(0, offer.price - (runState.ownedRelics['Couponer'] ?? 0));
     const totalCost = base + (base > 0 && runState.persistentEffects.atmFee ? 1 : 0);
     if (offer.type !== 'service' && totalCost > runState.gold) {
       // Not affordable: give quick visual feedback on the card price
@@ -378,6 +408,12 @@ export default class ShopScene extends Phaser.Scene {
     }
     this.shopLivesNum?.setText(String(runState.lives));
     this.shopCoinsNum?.setText(String(runState.gold));
+
+    // Sales Associate: restock shop items after purchases (regenerate offers).
+    // Implemented as a shop refresh via scene restart while preserving service purchase state via runState.persistentEffects.
+    if (offer.type !== 'service' && (runState.ownedRelics['SalesAssociate'] ?? 0) > 0) {
+      this.scene.restart();
+    }
   }
 
   // Legacy list renderer (unused) – keep for compatibility, returns startY
@@ -388,8 +424,8 @@ export default class ShopScene extends Phaser.Scene {
   // (no in-place rerender helpers; reroll restarts the scene)
 
   private priceLabel(offer: Offer): string {
-    const base = Math.max(0, offer.price - (runState.ownedRelics['Couponer'] ?? 0));
-    const price = runState.shopFreePurchases > 0 ? 0 : base;
+    // Legacy; keep accurate for items vs services
+    const price = this.effectivePrice(offer);
     return `${offer.label} — ${price}g ${this.ownedSuffix(offer)}`;
   }
 
@@ -401,6 +437,25 @@ export default class ShopScene extends Phaser.Scene {
         entry.priceText.setText(`${this.effectivePrice(entry.offer)}`);
       }
     }
+    // Also refresh service price labels (e.g., after Receipt / free purchase credit)
+    this.refreshServicePriceLabels();
+  }
+
+  private refreshServicePriceLabels() {
+    const refs = this.serviceRenderer?.getRefs?.();
+    if (!refs) return;
+    const update = (id: 'Reroll' | 'BuyLife', basePrice: number) => {
+      const ref = refs[id];
+      if (!ref) return;
+      // If SOLD already, leave it
+      if (this.servicePurchased.has(id)) return;
+      const offer: Offer = { type: 'service', id, price: basePrice, label: id };
+      const price = this.effectivePrice(offer);
+      ref.priceText.setText(String(price));
+      if (ref.coin) (ref.coin as any).setVisible?.(price > 0);
+    };
+    update('Reroll', 2);
+    update('BuyLife', 3);
   }
 
   private ownedSuffix(offer: Offer): string {
@@ -417,7 +472,13 @@ export default class ShopScene extends Phaser.Scene {
   }
 
   private purchase(offer: Offer) {
-    let finalPrice = Math.max(0, offer.price - (runState.ownedRelics['Couponer'] ?? 0));
+    // Compute discounted price without consuming free purchases yet
+    let finalPrice = offer.price;
+    if (offer.type !== 'service') {
+      finalPrice = Math.max(0, finalPrice - (runState.ownedRelics['Couponer'] ?? 0));
+    } else {
+      finalPrice = Math.max(0, finalPrice - (runState.ownedRelics['Barterer'] ?? 0));
+    }
     if (runState.shopFreePurchases > 0) {
       finalPrice = 0;
       runState.shopFreePurchases -= 1;
@@ -449,10 +510,15 @@ export default class ShopScene extends Phaser.Scene {
     } else if (offer.type === 'service') {
       if (offer.id === 'BuyLife') {
         runState.lives += 1;
+        // Track one-time buy unless Surgeon is owned
+        if ((runState.ownedRelics['Surgeon'] ?? 0) <= 0) {
+          (runState.persistentEffects as any).buyLifeBoughtThisShop = true;
+        }
       }
       if (offer.id === 'Reroll') {
         // Record that we've used our one reroll for this shop (unless Gamer)
         runState.persistentEffects.rerolledThisShop = true;
+        runState.persistentEffects.shopRerollCount = (runState.persistentEffects.shopRerollCount ?? 0) + 1;
         // Restart scene to regenerate offers cleanly
         this.scene.restart();
         return;

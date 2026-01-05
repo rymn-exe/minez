@@ -28,8 +28,10 @@ export function getLevelRng(): () => number {
  * Use this for shop offer selection and shop-specific randomness
  */
 export function getShopRng(): () => number {
-  // Use level as shop session identifier (each level has one shop)
-  return createRng(runState.seed + runState.level + 50000);
+  // Use level as shop session identifier (each level has one shop) plus reroll counter
+  // so rerolls actually change offers deterministically.
+  const rerolls = runState.persistentEffects.shopRerollCount ?? 0;
+  return createRng(runState.seed + runState.level + 50000 + rerolls * 9973);
 }
 
 /**
@@ -38,6 +40,15 @@ export function getShopRng(): () => number {
  */
 export function getTeammateRng(): () => number {
   return createRng(runState.seed + 100000);
+}
+
+/**
+ * Get RNG for challenge selection (deterministic based on seed + upcoming level)
+ * Used by ChallengeScene to offer 2 drafted challenges each level.
+ */
+export function getChallengeRng(): () => number {
+  // runState.level at ChallengeScene time is already the upcoming level
+  return createRng(runState.seed + runState.level + 75000);
 }
 
 /**

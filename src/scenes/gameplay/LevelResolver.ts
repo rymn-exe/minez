@@ -3,7 +3,7 @@
 import Phaser from 'phaser';
 import { Board, TileKind } from '../../game/types';
 import { runState } from '../../state';
-import { VIEW_WIDTH, VIEW_HEIGHT } from '../../game/consts';
+import { VIEW_WIDTH, VIEW_HEIGHT, FINAL_LEVEL } from '../../game/consts';
 
 export class LevelResolver {
   private cartographerAwarded: boolean = false;
@@ -34,14 +34,16 @@ export class LevelResolver {
       return;
     }
 
-    // Win after level 10: show win screen instead of going to shop
-    if (runState.level >= 10) {
+    // Win after final level
+    if (runState.level >= FINAL_LEVEL) {
       this.showEndScreen(true);
       return;
     }
 
     // Reset per-shop reroll usage when entering a fresh shop
     runState.persistentEffects.rerolledThisShop = false;
+    runState.persistentEffects.shopRerollCount = 0;
+    (runState.persistentEffects as any).buyLifeBoughtThisShop = false;
     (this.scene as Phaser.Scene).scene.start('ShopScene');
   }
 
@@ -65,14 +67,14 @@ export class LevelResolver {
   }
 
   private checkVexillologist(): void {
-    // Vexillologist: all real mines flagged and zero incorrect flags -> +3 gold per stack
+    // Vexillologist: all real mines flagged and zero incorrect flags -> +5 gold per stack
     const vex = runState.ownedRelics['Vexillologist'] ?? 0;
     if (vex > 0) {
       const allMines = this.board.tiles.filter(t => t.kind === TileKind.Mine);
       const allFlagged = allMines.every(t => t.flagged);
       const anyWrongFlags = this.board.tiles.some(t => t.flagged && t.kind !== TileKind.Mine);
       if (allFlagged && !anyWrongFlags) {
-        runState.gold += 3 * vex;
+        runState.gold += 5 * vex;
       }
     }
   }

@@ -1,5 +1,6 @@
 export type OwnedShopTileId = string;
 export type OwnedRelicId = string;
+export type OwnedChallengeId = string;
 
 export interface RunState {
   seed: number;
@@ -11,6 +12,7 @@ export interface RunState {
   shopFreePurchases: number;
   ownedShopTiles: Record<OwnedShopTileId, number>;
   ownedRelics: Record<OwnedRelicId, number>;
+  ownedChallenges: Record<OwnedChallengeId, number>;
   spawnPoolWeights: Record<OwnedShopTileId, number>;
   persistentEffects: {
     carLoan: boolean;
@@ -26,6 +28,13 @@ export interface RunState {
     noEndGold: boolean;
     atmFee: boolean;
     bloodDiamond: boolean;
+    donationBoxStacks: number;
+    appraisal: boolean;
+    buyLifeBoughtThisShop?: boolean;
+    shopRerollCount: number;
+    cheatSheetStacks: number;
+    luckyPennyStacks: number;
+    nineToFiveStacks: number;
   };
   stats: {
     revealedCount: number;
@@ -54,6 +63,7 @@ export const runState: RunState = {
   shopFreePurchases: 0,
   ownedShopTiles: {},
   ownedRelics: {},
+  ownedChallenges: {},
   spawnPoolWeights: {},
   persistentEffects: {
     carLoan: false,
@@ -68,7 +78,13 @@ export const runState: RunState = {
     rerolledThisShop: false,
     noEndGold: false,
     atmFee: false,
-    bloodDiamond: false
+    bloodDiamond: false,
+    donationBoxStacks: 0,
+    appraisal: false,
+    shopRerollCount: 0,
+    cheatSheetStacks: 0,
+    luckyPennyStacks: 0,
+    nineToFiveStacks: 0
   },
   stats: {
     revealedCount: 0,

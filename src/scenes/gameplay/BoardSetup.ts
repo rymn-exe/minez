@@ -21,6 +21,23 @@ export class BoardSetup {
     // Reset per-level counters
     runState.stats.specialRevealedThisLevel = 0;
     runState.persistentEffects.optimistUsedThisLevel = false;
+    // Reset per-level shop/challenge toggles that should not persist across levels
+    runState.persistentEffects.scratchcardStacks = 0;
+    runState.persistentEffects.tarotCard = false;
+    runState.persistentEffects.pokerChipUsedThisLevel = false;
+    runState.persistentEffects.cheatSheetStacks = 0;
+    runState.persistentEffects.luckyPennyStacks = 0;
+    runState.persistentEffects.nineToFiveStacks = 0;
+    // Reset per-level challenge modifiers (activate only when the tile is revealed)
+    runState.persistentEffects.carLoan = false;
+    runState.persistentEffects.snakeOil = false;
+    runState.persistentEffects.mathTest = false;
+    runState.persistentEffects.snakeVenom = { active: false, revealsUntilHit: 8 };
+    runState.persistentEffects.noEndGold = false;
+    runState.persistentEffects.atmFee = false;
+    runState.persistentEffects.bloodDiamond = false;
+    runState.persistentEffects.appraisal = false;
+    runState.persistentEffects.donationBoxStacks = 0;
     levelResolver.reset();
 
     // Activate start-of-level relics

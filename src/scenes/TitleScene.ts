@@ -55,13 +55,23 @@ export default class TitleScene extends Phaser.Scene {
 
     // Start button as a container with a rounded background graphics
     const startCont = this.add.container(VIEW_WIDTH / 2, 360).setDepth(1000);
+    // Style 6 (Neon Glow) from ButtonPreviewScene
+    const startGlow = this.add.graphics().setDepth(998);
+    startGlow.setPosition(VIEW_WIDTH / 2, 360);
     const startGfx = this.add.graphics();
     const drawBtn = (hover: boolean) => {
+      startGlow.clear();
       startGfx.clear();
-      startGfx.lineStyle(1, 0x3a3a46, 1);
-      startGfx.fillStyle(hover ? 0x353542 : 0x2a2a34, 1);
-      // draw centered rounded rect (260x56, radius 10)
+      if (hover) {
+        // Outer glow - draw relative to glow's position (which is at the button x,y)
+        startGlow.fillStyle(0xa78bfa, 0.3);
+        startGlow.fillRoundedRect(-135, -33, 270, 66, 12);
+        startGlow.fillStyle(0x7dd3fc, 0.2);
+        startGlow.fillRoundedRect(-133, -31, 266, 62, 11);
+      }
+      startGfx.fillStyle(0x1a1b23, 1);
       startGfx.fillRoundedRect(-130, -28, 260, 56, 10);
+      startGfx.lineStyle(2, hover ? 0xa78bfa : 0x3a3a46, hover ? 1 : 0.5);
       startGfx.strokeRoundedRect(-130, -28, 260, 56, 10);
     };
     drawBtn(false);
@@ -72,8 +82,14 @@ export default class TitleScene extends Phaser.Scene {
       .setOrigin(0.5)
       .setDepth(1100)
       .setInteractive({ useHandCursor: true });
-    startZone.on('pointerover', () => drawBtn(true));
-    startZone.on('pointerout', () => drawBtn(false));
+    startZone.on('pointerover', () => {
+      drawBtn(true);
+      startText.setColor('#a78bfa');
+    });
+    startZone.on('pointerout', () => {
+      drawBtn(false);
+      startText.setColor('#9ae6b4');
+    });
     const beginRun = () => {
       if (this.started) return;
       this.started = true;
@@ -81,11 +97,15 @@ export default class TitleScene extends Phaser.Scene {
       // eslint-disable-next-line no-console
       console.log('[Minez] Starting new run → TeammateScene');
       // Reset run state for a fresh run
+      // New seed per run so consecutive runs don't look identical.
+      runState.seed = Math.floor(Math.random() * 2 ** 31);
+      runState.rngState = 0;
       runState.level = 1;
       runState.lives = 3;
       runState.gold = 0;
       runState.ownedShopTiles = {};
       runState.ownedRelics = {};
+      runState.ownedChallenges = {};
       runState.shopFreePurchases = 0;
       runState.persistentEffects = {
         carLoan: false,
@@ -100,7 +120,13 @@ export default class TitleScene extends Phaser.Scene {
         rerolledThisShop: false,
         noEndGold: false,
         atmFee: false,
-        bloodDiamond: false
+        bloodDiamond: false,
+        donationBoxStacks: 0,
+        appraisal: false,
+        shopRerollCount: 0,
+        cheatSheetStacks: 0,
+        luckyPennyStacks: 0,
+        nineToFiveStacks: 0
       };
       runState.stats = {
         revealedCount: 0,
@@ -144,11 +170,6 @@ export default class TitleScene extends Phaser.Scene {
     // Also allow keyboard to start (does not auto-advance)
     this.input.keyboard?.once('keydown-ENTER', beginRun);
     this.input.keyboard?.once('keydown-SPACE', beginRun);
-    
-    // Press 'B' to view button previews
-    this.input.keyboard?.once('keydown-B', () => {
-      this.scene.start('ButtonPreviewScene');
-    });
 
     // Version label (bottom-right) in title font
     {
@@ -162,13 +183,6 @@ export default class TitleScene extends Phaser.Scene {
         }).setOrigin(1, 1).setAlpha(0.9);
       }
     }
-    
-    // Hint to view button previews
-    this.add.text(VIEW_WIDTH / 2, VIEW_HEIGHT - 30, 'Press B to view button styles', {
-      fontFamily: 'LTHoop',
-      fontSize: '12px',
-      color: '#9aa0a6'
-    }).setOrigin(0.5, 1).setAlpha(0.7);
   }
 
   private drawButtonLabel(text: string, rect: Phaser.GameObjects.Rectangle) {
