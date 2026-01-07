@@ -31,3 +31,10 @@ export const FINAL_LEVEL = 16;
 export const SHOP_SPAWN_CAP_PER_LEVEL = 2;
 export const SHOP_BASE_SPAWN_CHANCE = 0.505; // per slot, before Accountant (↑ by 0.5%)
 
+// Free collectible cadence:
+// Level 1, then every 3 levels thereafter (4, 7, 10, 13, ...), plus always before the final level.
+export function isFreeCollectibleLevel(level: number): boolean {
+  if (level <= 0) return false;
+  return level === 1 || (level - 1) % 3 === 0 || level === FINAL_LEVEL;
+}
+

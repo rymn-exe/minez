@@ -1,3 +1,13 @@
+## v2.1.2 (locked)
+
+- Core
+  - New progression: every 3 levels you get a free collectible pick (Level 1, 4, 7, 10, 13, and Final Level).
+  - Shop rebalance: the shop no longer sells collectibles (tiles + services only).
+  - Challenge draft unchanged: still occurs after every shop.
+- Cleanup
+  - Removed 🛒 Personal Shopper (shop-collectible modifier) since shop collectibles are gone.
+  - Collectible screen subheader removed (header only).
+
 ## v2.1.1 (locked)
 
 - Fixes

@@ -1,15 +1,15 @@
 import Phaser from 'phaser';
 import { runState } from '../state';
 import { ECONOMY } from '../game/consts';
-// Terminology update (v1.4): UI shows "Collectible(s)" instead of "Relic(s)".
-// Internal identifiers remain RELIC_* and offer.type 'relic' for compatibility.
-import { TILE_DESCRIPTIONS, RELIC_DESCRIPTIONS, EXTRA_RELIC_DESCRIPTIONS, EXTRA_TILE_DESCRIPTIONS, RELIC_UI_TEXT, TILE_UI_TEXT } from '../game/descriptions';
-import { SHOP_TILES, RELICS, priceForRarity } from '../game/items';
+import { TILE_DESCRIPTIONS, EXTRA_TILE_DESCRIPTIONS, TILE_UI_TEXT } from '../game/descriptions';
+import { SHOP_TILES, priceForRarity } from '../game/items';
 import { getShopRng } from '../game/rngUtils';
 import { pickRandom } from '../game/rng';
 import { ServiceRenderer } from './shop/ServiceRenderer';
 import { OfferRenderer } from './shop/OfferRenderer';
 
+// NOTE: Shop no longer sells collectibles, but we keep the 'relic' tag in the Offer type
+// to remain compatible with shared shop UI components.
 type Offer = { type: 'tile' | 'relic' | 'service'; id: string; price: number; label: string };
 
 export default class ShopScene extends Phaser.Scene {
@@ -213,18 +213,6 @@ export default class ShopScene extends Phaser.Scene {
       price: priceForRarity(t.rarity),
       label: t.label
     }));
-    let relicPool: Offer[] = RELICS.map(r => ({
-      type: 'relic',
-      id: r.id,
-      price: priceForRarity(r.rarity) + 5, // collectibles base 15, still aligns with v1 pricing
-      label: r.label
-    }));
-    // Filter Sugar Daddy rules:
-    // - no first shop (level 1)
-    // - no spawn when gold <= 0 (would be pointless/negative)
-    if (runState.level === 1 || runState.lives <= 1) {
-      relicPool = relicPool.filter(o => o.id !== 'SugarDaddy');
-    }
 
     // Simple deterministic selection by seed and level
     const shopRng = getShopRng();
@@ -240,9 +228,7 @@ export default class ShopScene extends Phaser.Scene {
     }
 
     const tileOffers = pickN(shopPool, 3);
-    const extraRelics = (runState.ownedRelics['PersonalShopper'] ?? 0);
-    const relicOffers = pickN(relicPool, 2 + extraRelics);
-    this.offers = [...tileOffers, ...relicOffers];
+    this.offers = [...tileOffers];
 
     // Layout metrics (readable layout)
     const margin = 24;
@@ -256,21 +242,13 @@ export default class ShopScene extends Phaser.Scene {
     const hoverY = this.scale.height - hoverH - 28;
     const hoverW = this.scale.width - margin * 2;
 
-    // Even vertical spacing anchors between top header and hover area
-    const servicesMaxTop = hoverY - 120;
-    const tilesHeaderTop = topY;
-    const servicesHeaderTop = servicesMaxTop;
-    const collectiblesHeaderTop = Math.round(tilesHeaderTop + (servicesHeaderTop - tilesHeaderTop) / 2);
-
     // Tiles row (full width)
-    const tilesTitleBottom = this.drawHeader(margin, tilesHeaderTop, fullW, 'Tiles', '#a78bfa');
+    const tilesTitleBottom = this.drawHeader(margin, topY, fullW, 'Tiles', '#a78bfa');
     const tilesCols = Math.max(1, tileOffers.length); // one centered row like prototype
-    this.offerRenderer.renderOffersGrid(tileOffers, margin, tilesTitleBottom, fullW, tilesCols, colGap, rowGap);
+    const tilesBottom = this.offerRenderer.renderOffersGrid(tileOffers, margin, tilesTitleBottom, fullW, tilesCols, colGap, rowGap);
 
-    // Collectibles row (full width)
-    const relicsTitleBottom = this.drawHeader(margin, collectiblesHeaderTop, fullW, 'Collectibles', '#7dd3fc');
-    const relicCols = Math.max(1, relicOffers.length);
-    this.offerRenderer.renderOffersGrid(relicOffers, margin, relicsTitleBottom, fullW, relicCols, colGap, rowGap);
+    // Services section — clamp safely above the hover area
+    const servicesHeaderTop = Math.min(Math.max(tilesBottom + 40, topY + 180), hoverY - 120);
 
     // Footer hover text area (transparent so hover text appears to float)
     this.add.rectangle(margin, hoverY, hoverW, hoverH, 0x000000, 0).setOrigin(0, 0);
@@ -287,7 +265,7 @@ export default class ShopScene extends Phaser.Scene {
       align: 'left'
     }).setOrigin(0, 0).setDepth(4001);
 
-    // Services section — header with divider at computed anchor
+    // Services section — header with divider
     const servicesTitleBottom = this.drawHeader(margin, servicesHeaderTop, fullW, 'Services', '#9ae6b4');
     const svcTop = servicesTitleBottom + 12;
     const svcColW = 160;
@@ -496,15 +474,6 @@ export default class ShopScene extends Phaser.Scene {
       if (offer.id === 'Receipt') {
         runState.shopFreePurchases += 1;
         this.refreshAllPriceLabels();
-      }
-    } else if (offer.type === 'relic') {
-      runState.ownedRelics[offer.id] = (runState.ownedRelics[offer.id] ?? 0) + 1;
-      // Sugar Daddy: convert lives -> gold, but never below 1 life
-      if (offer.id === 'SugarDaddy') {
-        const transferable = Math.max(0, runState.lives - 1);
-        runState.lives -= transferable;
-        runState.gold += transferable;
-        this.titleText.setText(`Shop — Gold: ${runState.gold}`);
       }
     } else if (offer.type === 'service') {
       if (offer.id === 'BuyLife') {
