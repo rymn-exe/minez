@@ -39,7 +39,8 @@ export function getShopRng(): () => number {
  * Use this for initial teammate/relic selection
  */
 export function getTeammateRng(): () => number {
-  return createRng(runState.seed + 100000);
+  // Include level so "free collectible" picks later in the run are different but still deterministic.
+  return createRng(runState.seed + 100000 + runState.level * 977);
 }
 
 /**

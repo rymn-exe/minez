@@ -44,7 +44,6 @@ export const RELICS: RelicDef[] = [
   { id: 'Minimalist', label: '♻️ Minimalist', rarity: 'Rare' },
   { id: 'Lapidarist', label: '💠 Lapidarist', rarity: 'Uncommon' },
   { id: 'Gambler', label: '🎰 Gambler', rarity: 'Uncommon' },
-  { id: 'PersonalShopper', label: '🛒 Personal Shopper', rarity: 'Uncommon' },
   { id: 'Cheapskate', label: '🪙 Cheapskate', rarity: 'Uncommon' },
   { id: 'Cartographer', label: '🗺️ Cartographer', rarity: 'Uncommon' },
   { id: 'Couponer', label: '🏷️ Couponer', rarity: 'Uncommon' },

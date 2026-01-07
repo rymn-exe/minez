@@ -50,11 +50,6 @@ export default class TeammateScene extends Phaser.Scene {
       fontSize: '32px',
       color: '#a7f3d0'
     });
-    this.add.text(24, 100, 'Pick one collectible to start your run. It\'s free.', {
-      fontFamily: 'LTHoop',
-      fontSize: '16px',
-      color: '#cfd2ff'
-    });
 
     // pick 3 random unique relics (deterministic based on seed)
     const pool = [...RELICS];

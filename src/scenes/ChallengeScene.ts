@@ -4,6 +4,7 @@
 //  - Drafted challenges then spawn on future boards (see generation.ts)
 import Phaser from 'phaser';
 import { VIEW_WIDTH } from '../game/consts';
+import { isFreeCollectibleLevel } from '../game/consts';
 import { ChallengeId } from '../game/types';
 import { CHALLENGE_DESCRIPTIONS, CHALLENGE_UI_TEXT } from '../game/descriptions';
 import { runState } from '../state';
@@ -198,7 +199,13 @@ export default class ChallengeScene extends Phaser.Scene {
         ownedText.setVisible(true);
         // Fade into the next level
         this.cameras.main.once(Phaser.Cameras.Scene2D.Events.FADE_OUT_COMPLETE, () => {
-          this.scene.start('GameScene');
+          // Every 3 levels (1,4,7,...) and before the final level, grant a free collectible pick.
+          // Important: runState.level at ChallengeScene time is already the upcoming level.
+          if (isFreeCollectibleLevel(runState.level)) {
+            this.scene.start('TeammateScene');
+          } else {
+            this.scene.start('GameScene');
+          }
         });
         this.cameras.main.fadeOut(150, 0, 0, 0);
       });
