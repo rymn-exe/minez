@@ -27,7 +27,6 @@ export class ManifestPanel {
   // Row references for flashing
   private shopRowById: Record<string, Phaser.GameObjects.Text> = {};
   private challengeRowById: Record<string, Phaser.GameObjects.Text> = {};
-  private relicRowById: Record<string, Phaser.GameObjects.Text> = {};
   // Stat pill number refs
   private levelNum?: Phaser.GameObjects.Text;
   private livesNum?: Phaser.GameObjects.Text;
@@ -167,7 +166,6 @@ export class ManifestPanel {
     this.shopTexts = [];
     this.challengeTexts = [];
     this.relicTexts = [];
-    this.relicRowById = {};
     this.tooltipNameText.setText('');
     this.tooltipDescText.setText('');
 
@@ -229,7 +227,6 @@ export class ManifestPanel {
         case ChallengeId.ATMFee: return '🏧 ATM Fee';
         case ChallengeId.Coal: return '🪨 Coal';
         case ChallengeId.BoxingDay: return '🥊 Boxing Day';
-        case ChallengeId.Thief: return '🦝 Thief';
         case ChallengeId.Jackhammer: return '🛠️ Jackhammer';
         case ChallengeId.DonationBox: return '🎁 Donation Box';
         case ChallengeId.Appraisal: return '📏 Appraisal';
@@ -373,7 +370,6 @@ export class ManifestPanel {
         const n = ownedRelics[id] ?? 0;
         const countSuffix = n > 1 ? ` ×${n}` : '';
         const txt = this.scene.add.text(this.x + 12, cursorY, `${relicLabelById[id] ?? id}${countSuffix}`, { fontFamily: 'LTHoop', fontSize: '14px', color: '#e9e9ef' }).setOrigin(0, 0).setDepth(20);
-        this.relicRowById[id] = txt;
         txt.setInteractive({ useHandCursor: true });
         const desc = RELIC_UI_TEXT[id] ?? RELIC_DESCRIPTIONS[id] ?? EXTRA_RELIC_DESCRIPTIONS[id] ?? '';
         txt.on('pointerover', () => {
@@ -442,11 +438,8 @@ export class ManifestPanel {
   }
 
   // Public API: flash a manifest row when a tile procs
-  flashRow(kind: 'shop' | 'challenge' | 'relic', id: string) {
-    const row =
-      kind === 'shop' ? this.shopRowById[id]
-      : kind === 'challenge' ? this.challengeRowById[id]
-      : this.relicRowById[id];
+  flashRow(kind: 'shop' | 'challenge', id: string) {
+    const row = kind === 'shop' ? this.shopRowById[id] : this.challengeRowById[id];
     if (!row) return;
     this.scene.tweens.add({
       targets: row,

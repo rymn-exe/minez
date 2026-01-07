@@ -430,10 +430,6 @@ function applyChallengeOnReveal(board: Board, tile: Tile, res: RevealResult) {
       runState.persistentEffects.carLoan = true;
       break;
     }
-    case ChallengeId.Thief: {
-      // Activates at level start (see BoardSetup). No on-reveal effect.
-      break;
-    }
     case ChallengeId.Jackhammer: {
       // Reveal all surrounding tiles, including mines.
       // Prevent chain reactions: a Jackhammer revealed *by* another Jackhammer does not trigger.

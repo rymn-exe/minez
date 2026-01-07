@@ -208,7 +208,6 @@ export class TileRenderer {
       case ChallengeId.ATMFee: return '🏧';
       case ChallengeId.Coal: return '🪨';
       case ChallengeId.BoxingDay: return '🥊';
-      case ChallengeId.Thief: return '🦝';
       case ChallengeId.Jackhammer: return '🛠️';
       case ChallengeId.DonationBox: return '🎁';
       case ChallengeId.Appraisal: return '📏';

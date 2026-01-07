@@ -27,7 +27,6 @@ export enum ChallengeId {
   ATMFee = 'ATMFee',
   Coal = 'Coal',
   BoxingDay = 'BoxingDay',
-  Thief = 'Thief',
   Jackhammer = 'Jackhammer',
   DonationBox = 'DonationBox',
   Appraisal = 'Appraisal',

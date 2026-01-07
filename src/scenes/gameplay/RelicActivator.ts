@@ -87,10 +87,14 @@ export class RelicActivator {
     const researcher = runState.ownedRelics['Researcher'] ?? 0;
     if (researcher === 0) return;
 
-    const idx = this.board.tiles.findIndex(t => t.kind === TileKind.Challenge && !t.flagged && !t.revealed);
-    if (idx >= 0) {
-      this.board.tiles[idx].flagged = true;
-      this.board.tiles[idx].flagColor = 'yellow';
+    // Flag 1 random challenge tile per stack (if any exist). Deterministic per seed+level.
+    const rand = createRng(runState.seed + runState.level + 2000);
+    for (let k = 0; k < researcher; k++) {
+      const candidates = this.board.tiles.filter(t => t.kind === TileKind.Challenge && !t.flagged && !t.revealed);
+      if (candidates.length === 0) return;
+      const pick = candidates[Math.floor(rand() * candidates.length)];
+      pick.flagged = true;
+      pick.flagColor = 'yellow';
     }
   }
 }

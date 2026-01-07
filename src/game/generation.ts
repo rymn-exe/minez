@@ -37,7 +37,6 @@ const CHALLENGE_SPAWN_BAND: Record<string, SpawnBand> = {
   [ChallengeId.ATMFee]: 'Medium',
   [ChallengeId.BoxingDay]: 'Medium',
   [ChallengeId.Stopwatch]: 'Medium',
-  [ChallengeId.Thief]: 'Medium',
   [ChallengeId.Jackhammer]: 'High',
   [ChallengeId.DonationBox]: 'High',
   [ChallengeId.Appraisal]: 'High',

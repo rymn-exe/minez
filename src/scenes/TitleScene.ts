@@ -137,8 +137,7 @@ export default class TitleScene extends Phaser.Scene {
         challengeTilesRemaining: 0,
         shopCounts: {},
         challengeCounts: {},
-        specialRevealedThisLevel: 0,
-        pendingToasts: []
+        specialRevealedThisLevel: 0
       };
       this.scene.start('TeammateScene');
     };

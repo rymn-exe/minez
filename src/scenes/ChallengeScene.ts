@@ -34,7 +34,6 @@ export default class ChallengeScene extends Phaser.Scene {
       case String(ChallengeId.FindersFee): return '🫴 Finder’s Fee';
       case String(ChallengeId.ATMFee): return '🏧 ATM Fee';
       case String(ChallengeId.BoxingDay): return '🥊 Boxing Day';
-      case String(ChallengeId.Thief): return '🦝 Thief';
       case String(ChallengeId.Jackhammer): return '🛠️ Jackhammer';
       case String(ChallengeId.DonationBox): return '🎁 Donation Box';
       case String(ChallengeId.Appraisal): return '📏 Appraisal';
@@ -104,7 +103,7 @@ export default class ChallengeScene extends Phaser.Scene {
       color: '#cfd2ff'
     });
 
-    // Build the eligible pool (exclude Coal only)
+    // Build the eligible pool (exclude disabled challenges)
     const all = Object.values(ChallengeId).map(String);
     const eligible = all.filter(id => id !== String(ChallengeId.Coal));
 

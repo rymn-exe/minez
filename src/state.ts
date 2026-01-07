@@ -46,8 +46,6 @@ export interface RunState {
     shopCounts: Record<string, number>;
     challengeCounts: Record<string, number>;
     specialRevealedThisLevel: number;
-    // One-frame UI notifications emitted during board setup (consumed by GameScene after UI mounts).
-    pendingToasts?: Array<{ kind: 'thief'; id: string }>;
   };
 }
 
@@ -96,8 +94,7 @@ export const runState: RunState = {
     challengeTilesRemaining: 0,
     shopCounts: {},
     challengeCounts: {},
-    specialRevealedThisLevel: 0,
-    pendingToasts: []
+    specialRevealedThisLevel: 0
   }
 };
 

@@ -16,7 +16,7 @@ import { runState } from '../state';
 import { ManifestPanel } from '../ui/manifest';
 import { events, GameEvent, TileRevealedPayload, GoldGainedPayload, LifeChangedPayload, LevelEndResolvedPayload } from '../game/events';
 import { ManifestWithExtensions } from '../types/phaser-extensions';
-import { RELICS, SHOP_TILES } from '../game/items';
+import { SHOP_TILES } from '../game/items';
 import { TILE_DESCRIPTIONS, CHALLENGE_DESCRIPTIONS, EXTRA_TILE_DESCRIPTIONS, TILE_UI_TEXT, CHALLENGE_UI_TEXT } from '../game/descriptions';
 import { HoverSystem } from './ui/HoverSystem';
 import { FlagPaintMode, FLAG_COLOR_HEX } from './gameplay/FlagPaintMode';
@@ -220,38 +220,7 @@ export default class GameScene extends Phaser.Scene {
       (id: string) => this.challengeLabel(id)
     );
 
-    // Drain any start-of-level toasts (e.g., 🦝 Thief stealing a collectible before UI mounts).
-    {
-      const pending = runState.stats.pendingToasts ?? [];
-      if (pending.length > 0) {
-        const relicLabelById: Record<string, string> = {};
-        for (const r of RELICS) relicLabelById[r.id] = r.label;
-        // Refresh once to ensure collectibles list is current, then animate.
-        this.manifest.refresh();
-        layoutRightPanel();
-        const hoverYLocal = hoverY;
-        for (const p of pending) {
-          if (p.kind === 'thief') {
-            const label = relicLabelById[p.id] ?? p.id;
-            // Flash the row if it still exists; if the stack hit 0 and the key was deleted, it won't exist (toast still shows).
-            this.manifest.flashRow?.('relic' as any, p.id);
-            const toast = this.add.text(margin + 12, hoverYLocal - 8, `🦝 Thief stole: ${label}`, {
-              fontFamily: 'LTHoop, \"Apple Color Emoji\", \"Segoe UI Emoji\", \"Noto Color Emoji\", sans-serif',
-              fontSize: '14px',
-              color: '#fca5a5'
-            }).setOrigin(0, 1).setDepth(4500);
-            this.tweens.add({
-              targets: toast,
-              alpha: { from: 1, to: 0 },
-              y: toast.y - 10,
-              duration: 1200,
-              onComplete: () => toast.destroy()
-            });
-          }
-        }
-      }
-      runState.stats.pendingToasts = [];
-    }
+    // (Thief removed)
 
     // Initialize level resolver
     this.levelResolver = new LevelResolver(this, this.board, this.manifest);
@@ -501,7 +470,6 @@ export default class GameScene extends Phaser.Scene {
       case String(ChallengeId.ATMFee): return '🏧 ATM Fee';
       case String(ChallengeId.Coal): return '🪨 Coal';
       case String(ChallengeId.BoxingDay): return '🥊 Boxing Day';
-      case String(ChallengeId.Thief): return '🦝 Thief';
       case String(ChallengeId.Jackhammer): return '🛠️ Jackhammer';
       case String(ChallengeId.DonationBox): return '🎁 Donation Box';
       case String(ChallengeId.Appraisal): return '📏 Appraisal';
