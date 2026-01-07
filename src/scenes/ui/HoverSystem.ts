@@ -94,12 +94,23 @@ export class HoverSystem {
     }
     
     if (t.kind === TileKind.Number) {
-      this.setHover(`Number ${t.number}`, '#e9e9ef', 'Adjacent mines count');
+      // Do not leak the true number when the tile is visually masked as '?'.
+      // (Random masking, Math Test masking, Tarot/LuckyPenny pending transforms, etc.)
+      if (t.mathMasked || t.randomMasked || !!t.pendingTransform) {
+        this.setHover('?', '#e9e9ef', 'Adjacent mines count is unknown');
+      } else {
+        this.setHover(`Number ${t.number}`, '#e9e9ef', 'Adjacent mines count');
+      }
       return;
     }
     
     if (t.kind === TileKind.Safe) {
-      this.setHover('Safe', '#e9e9ef', 'Empty tile');
+      // Frontier-masked 0-tiles display '?' to preserve uncertainty; hover should not spoil that.
+      if (t.subId === 'FrontierQuestion') {
+        this.setHover('?', '#e9e9ef', 'Adjacent mines count is unknown');
+      } else {
+        this.setHover('Safe', '#e9e9ef', 'Empty tile');
+      }
       return;
     }
     

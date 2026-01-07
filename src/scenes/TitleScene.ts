@@ -124,7 +124,6 @@ export default class TitleScene extends Phaser.Scene {
         donationBoxStacks: 0,
         appraisal: false,
         shopRerollCount: 0,
-        cheatSheetStacks: 0,
         luckyPennyStacks: 0,
         nineToFiveStacks: 0
       };
@@ -138,7 +137,8 @@ export default class TitleScene extends Phaser.Scene {
         challengeTilesRemaining: 0,
         shopCounts: {},
         challengeCounts: {},
-        specialRevealedThisLevel: 0
+        specialRevealedThisLevel: 0,
+        pendingToasts: []
       };
       this.scene.start('TeammateScene');
     };

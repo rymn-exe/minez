@@ -16,7 +16,7 @@ import { runState } from '../state';
 import { ManifestPanel } from '../ui/manifest';
 import { events, GameEvent, TileRevealedPayload, GoldGainedPayload, LifeChangedPayload, LevelEndResolvedPayload } from '../game/events';
 import { ManifestWithExtensions } from '../types/phaser-extensions';
-import { SHOP_TILES } from '../game/items';
+import { RELICS, SHOP_TILES } from '../game/items';
 import { TILE_DESCRIPTIONS, CHALLENGE_DESCRIPTIONS, EXTRA_TILE_DESCRIPTIONS, TILE_UI_TEXT, CHALLENGE_UI_TEXT } from '../game/descriptions';
 import { HoverSystem } from './ui/HoverSystem';
 import { FlagPaintMode, FLAG_COLOR_HEX } from './gameplay/FlagPaintMode';
@@ -220,6 +220,39 @@ export default class GameScene extends Phaser.Scene {
       (id: string) => this.challengeLabel(id)
     );
 
+    // Drain any start-of-level toasts (e.g., 🦝 Thief stealing a collectible before UI mounts).
+    {
+      const pending = runState.stats.pendingToasts ?? [];
+      if (pending.length > 0) {
+        const relicLabelById: Record<string, string> = {};
+        for (const r of RELICS) relicLabelById[r.id] = r.label;
+        // Refresh once to ensure collectibles list is current, then animate.
+        this.manifest.refresh();
+        layoutRightPanel();
+        const hoverYLocal = hoverY;
+        for (const p of pending) {
+          if (p.kind === 'thief') {
+            const label = relicLabelById[p.id] ?? p.id;
+            // Flash the row if it still exists; if the stack hit 0 and the key was deleted, it won't exist (toast still shows).
+            this.manifest.flashRow?.('relic' as any, p.id);
+            const toast = this.add.text(margin + 12, hoverYLocal - 8, `🦝 Thief stole: ${label}`, {
+              fontFamily: 'LTHoop, \"Apple Color Emoji\", \"Segoe UI Emoji\", \"Noto Color Emoji\", sans-serif',
+              fontSize: '14px',
+              color: '#fca5a5'
+            }).setOrigin(0, 1).setDepth(4500);
+            this.tweens.add({
+              targets: toast,
+              alpha: { from: 1, to: 0 },
+              y: toast.y - 10,
+              duration: 1200,
+              onComplete: () => toast.destroy()
+            });
+          }
+        }
+      }
+      runState.stats.pendingToasts = [];
+    }
+
     // Initialize level resolver
     this.levelResolver = new LevelResolver(this, this.board, this.manifest);
 
@@ -278,9 +311,8 @@ export default class GameScene extends Phaser.Scene {
         this.time.delayedCall(190, () => {
           const label = this.numbers[y][x];
           if (!label) return;
-          const useOptimist = ((runState.ownedRelics['Optimist'] ?? 0) > 0) &&
-            !!runState.persistentEffects.optimistUsedThisLevel &&
-            !this.optimistShownThisLevel;
+          // Optimist: the mine reveal path marks this specific tile with pendingTransform='Quartz'.
+          const useOptimist = tile.pendingTransform === 'Quartz';
           this.tweens.add({
             targets: label,
             alpha: { from: 1, to: 0.2 },
@@ -288,8 +320,19 @@ export default class GameScene extends Phaser.Scene {
             repeat: 1,
             duration: 120,
             onComplete: () => {
-              label.setText(useOptimist ? '⚪' : '💥');
-              if (useOptimist) this.optimistShownThisLevel = true;
+              if (useOptimist) {
+                // Make the transform persistent by changing the underlying model to a revealed Quartz shop tile.
+                // Otherwise any later re-render would revert it to a mine icon.
+                tile.kind = TileKind.Shop;
+                tile.subId = 'Quartz';
+                tile.pendingTransform = undefined;
+                this.tileRenderer.renderTile(x, y);
+                this.optimistShownThisLevel = true;
+              } else {
+                // Persist "exploded" state in the tile model so re-renders don't revert to 💣.
+                tile.subId = 'Exploded';
+                this.tileRenderer.renderTile(x, y);
+              }
             }
           });
         });
@@ -297,7 +340,8 @@ export default class GameScene extends Phaser.Scene {
 
       // Generic transform animation: flash twice, then swap the icon/state.
       // Used for Tarot/LuckyPenny masked numbers and Investor upgrades.
-      if (tile.pendingTransform) {
+      // Note: Optimist mines handle their transform above.
+      if (tile.pendingTransform && tile.kind !== TileKind.Mine) {
         this.time.delayedCall(190, () => {
           const label = this.numbers[y][x];
           if (!label) return;
@@ -310,7 +354,24 @@ export default class GameScene extends Phaser.Scene {
             onComplete: () => {
               // Apply the transform to the tile model and re-render (ensures correct font sizing)
               const to = tile.pendingTransform!;
-              tile.subId = to;
+              // If a masked number “transforms”, change its kind so the new icon persists and is consistent with hover.
+              if (tile.kind === TileKind.Number) {
+                if (to === 'Quartz') {
+                  tile.kind = TileKind.Shop;
+                  tile.subId = 'Quartz';
+                } else if (to === 'Ore') {
+                  tile.kind = TileKind.Ore;
+                  delete tile.subId;
+                } else if (to === 'Diamond') {
+                  // Use Ore+subId Diamond to display 💎 consistently.
+                  tile.kind = TileKind.Ore;
+                  tile.subId = 'Diamond';
+                } else {
+                  tile.subId = to;
+                }
+              } else {
+                tile.subId = to;
+              }
               tile.pendingTransform = undefined;
               // If we were masked, unmask now so the icon can display
               tile.mathMasked = false;
@@ -336,6 +397,9 @@ export default class GameScene extends Phaser.Scene {
     this.disposers.push(events.on(GameEvent.TileRevealed, ({ tile }: TileRevealedPayload) => {
       const stacks = runState.ownedRelics['Cartographer'] ?? 0;
       if (stacks <= 0) return;
+      // Important: TileRevealed can fire many times in a flood-reveal, and will continue firing
+      // for the rest of the level. Only award Cartographer once per level.
+      if (this.levelResolver.hasCartographerAwarded()) return;
       const w = this.board.width, h = this.board.height;
       const corners = [
         this.board.tiles[0],

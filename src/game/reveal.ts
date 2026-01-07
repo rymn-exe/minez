@@ -76,6 +76,8 @@ export function revealTile(board: Board, x: number, y: number, byUser: boolean =
       if (!runState.persistentEffects.optimistUsedThisLevel && (runState.ownedRelics['Optimist'] ?? 0) > 0) {
         runState.persistentEffects.optimistUsedThisLevel = true;
         tile.revealed = true;
+        // Mark for UI transform after the reveal flip (handled in GameScene).
+        tile.pendingTransform = 'Quartz';
         runState.stats.minesTotal = Math.max(0, runState.stats.minesTotal - 1);
         // Lapidarist applies as mine opened
         const lap = runState.ownedRelics['Lapidarist'] ?? 0;
@@ -248,12 +250,9 @@ export function revealTile(board: Board, x: number, y: number, byUser: boolean =
       if (runState.persistentEffects.mathTest && tile.number > 1) {
         tile.mathMasked = true;
       }
-      // Global masking: every revealed number has a base 20% chance to display as '?',
-      // reduced by Cheat Sheet by 5% per stack (clamped at 0%).
+      // Global masking: every revealed number has a base 20% chance to display as '?'.
       const tileRng = getTileRng(board, x, y);
-      const cheatStacks = runState.persistentEffects.cheatSheetStacks ?? 0;
-      const maskChance = Math.max(0, 0.20 - 0.05 * cheatStacks);
-      if (tileRng() < maskChance) {
+      if (tileRng() < 0.20) {
         tile.randomMasked = true;
       }
 
@@ -432,14 +431,7 @@ function applyChallengeOnReveal(board: Board, tile: Tile, res: RevealResult) {
       break;
     }
     case ChallengeId.Thief: {
-      // Steal a random owned collectible immediately.
-      const owned = Object.entries(runState.ownedRelics || {}).filter(([, n]) => (n ?? 0) > 0);
-      if (owned.length > 0) {
-        const rng = getEffectRng('Thief', runState.stats.revealedCount);
-        const pick = owned[Math.floor(rng() * owned.length)];
-        const id = pick[0];
-        runState.ownedRelics[id] = Math.max(0, (runState.ownedRelics[id] ?? 0) - 1);
-      }
+      // Activates at level start (see BoardSetup). No on-reveal effect.
       break;
     }
     case ChallengeId.Jackhammer: {
@@ -602,10 +594,6 @@ function applyShopTileOnReveal(tile: Tile, res: RevealResult) {
     }
     case 'Scratchcard': {
       runState.persistentEffects.scratchcardStacks += 1;
-      break;
-    }
-    case 'CheatSheet': {
-      runState.persistentEffects.cheatSheetStacks += 1;
       break;
     }
     case 'LuckyPenny': {

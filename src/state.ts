@@ -32,7 +32,6 @@ export interface RunState {
     appraisal: boolean;
     buyLifeBoughtThisShop?: boolean;
     shopRerollCount: number;
-    cheatSheetStacks: number;
     luckyPennyStacks: number;
     nineToFiveStacks: number;
   };
@@ -47,6 +46,8 @@ export interface RunState {
     shopCounts: Record<string, number>;
     challengeCounts: Record<string, number>;
     specialRevealedThisLevel: number;
+    // One-frame UI notifications emitted during board setup (consumed by GameScene after UI mounts).
+    pendingToasts?: Array<{ kind: 'thief'; id: string }>;
   };
 }
 
@@ -82,7 +83,6 @@ export const runState: RunState = {
     donationBoxStacks: 0,
     appraisal: false,
     shopRerollCount: 0,
-    cheatSheetStacks: 0,
     luckyPennyStacks: 0,
     nineToFiveStacks: 0
   },
@@ -96,7 +96,8 @@ export const runState: RunState = {
     challengeTilesRemaining: 0,
     shopCounts: {},
     challengeCounts: {},
-    specialRevealedThisLevel: 0
+    specialRevealedThisLevel: 0,
+    pendingToasts: []
   }
 };
 

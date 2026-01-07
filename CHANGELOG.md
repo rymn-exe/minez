@@ -1,3 +1,13 @@
+## v2.1.1 (locked)
+
+- Fixes
+  - Mine explosions now persist across board re-renders (e.g., triggering 🔎 Metal Detector no longer “un-explodes” mines).
+  - Optimist / Tarot / Lucky Penny / Investor transforms now persist by updating the underlying tile model (not just the text label).
+  - Thief now clearly procs at level start: stolen collectible is removed properly and a toast + manifest flash is shown.
+  - Hover on ? tiles no longer leaks the true number (“Adjacent mines count is unknown”).
+  - Cartographer no longer multi-awards during flood reveals.
+  - Removed 📄 Cheat Sheet entirely.
+
 ## v2.1.0 (locked)
 
 - Core

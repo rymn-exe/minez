@@ -62,7 +62,6 @@ export default class ShopScene extends Phaser.Scene {
       TarotCard: '🪬',
       MetalDetector: '🔎',
       LaundryMoney: '🧼',
-      CheatSheet: '📄',
       PokerChip: '🃏',
       LuckyPenny: '🧧',
       NineToFive: '🏢',

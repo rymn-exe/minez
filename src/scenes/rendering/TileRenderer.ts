@@ -67,7 +67,8 @@ export class TileRenderer {
     if (t.kind === TileKind.Mine) {
       rect.setFillStyle(0x1f2430, revealedAlpha);
       setFontPx(this.emojiFontPx);
-      label.setText('💣');
+      // Persist explosion visuals across re-renders (e.g., after BoardChanged).
+      label.setText(t.subId === 'Exploded' ? '💥' : '💣');
       clearIcon();
     } else if (t.kind === TileKind.X) {
       rect.setFillStyle(0x1e7b4a, revealedAlpha);
@@ -183,7 +184,6 @@ export class TileRenderer {
       case 'TarotCard': return '🪬';
       case 'MetalDetector': return '🔎';
       case 'LaundryMoney': return '🧼';
-      case 'CheatSheet': return '📄';
       case 'PokerChip': return '🃏';
       case 'LuckyPenny': return '🧧';
       case 'NineToFive': return '🏢';

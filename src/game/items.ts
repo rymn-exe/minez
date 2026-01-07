@@ -29,7 +29,6 @@ export const SHOP_TILES: ShopTileDef[] = [
   { id: 'TarotCard', label: '🪬 Tarot Card', rarity: 'Uncommon' },
   { id: 'MetalDetector', label: '🔎 Metal Detector', rarity: 'Uncommon' },
   { id: 'LaundryMoney', label: '🧼 Laundry Money', rarity: 'Uncommon' },
-  { id: 'CheatSheet', label: '📄 Cheat Sheet', rarity: 'Common' },
   { id: 'PokerChip', label: '🃏 Poker Chip', rarity: 'Rare' },
   { id: 'LuckyPenny', label: '🧧 Lucky Penny', rarity: 'Uncommon' },
   { id: 'NineToFive', label: '🏢 9-5', rarity: 'Common' }

@@ -8,6 +8,7 @@ import { Board, Tile, TileKind, ChallengeId, indexAt } from './types';
 import { createRng, rngInt, pickRandom } from './rng';
 import { runState } from '../state';
 import { SHOP_SPAWN_CAP_PER_LEVEL, SHOP_BASE_SPAWN_CHANCE } from './consts';
+import { SHOP_TILES } from './items';
 
 type SpawnBand = 'Low' | 'Medium' | 'High' | 'VeryHigh';
 const SPAWN_TARGET: Record<SpawnBand, number> = {
@@ -220,7 +221,9 @@ export function generateLevel(width: number, height: number): GenerationResult {
   remainingSpecialSlots = Math.max(0, remainingSpecialSlots - extraChallengeBudget);
 
   // Place shop tiles from owned pool (no per‑level cap)
-  const ownedIds = Object.keys(runState.ownedShopTiles);
+  // Filter to only shop tiles that still exist (prevents legacy/removed IDs from spawning).
+  const allowedShopIds = new Set(SHOP_TILES.map(s => s.id));
+  const ownedIds = Object.keys(runState.ownedShopTiles).filter(id => allowedShopIds.has(id));
   let spawned = 0;
   const spawnedById: Record<string, number> = {};
   const accountantStacks = runState.ownedRelics['Accountant'] ?? 0;

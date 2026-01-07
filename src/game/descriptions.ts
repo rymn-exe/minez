@@ -15,7 +15,6 @@ export const TILE_DESCRIPTIONS: Record<string, string> = {
   TarotCard: 'Revealing a ? tile has a 5% chance to turn it into Quartz, Diamond, or Ore.',
   MetalDetector: 'Flags all surrounding mines (may flag 🍀 Clover).',
   LaundryMoney: 'Rounds your gold up to the nearest 5.',
-  CheatSheet: 'Decrease the chance of seeing ? tiles by 5%. Stackable.',
   PokerChip: 'Marks two tiles with blue flags: one is ❌, one is 💣. No indication which is which. Once per board.',
   LuckyPenny: 'Revealing a ? tile has a 5% chance to turn it into Quartz.',
   NineToFive: 'Whenever you lose a life, gain 2 gold.'
@@ -37,7 +36,6 @@ export const TILE_UI_TEXT: Record<string, string> = {
   TarotCard: 'Revealing a ? tile has a 5% chance to turn it into a Quartz, Diamond, or Ore tile.',
   MetalDetector: 'When revealed, all adjacent mines are flagged.',
   LaundryMoney: 'When revealed, your gold is rounded up to the nearest 5.',
-  CheatSheet: 'Decrease the chances of seeing ? tiles by 5%.',
   PokerChip: 'Marks two tiles with blue flags: one is the X, one is a mine. No indication which is which. Can only appear once per board.',
   LuckyPenny: 'Revealing a ? tile has a 5% chance to turn into Quartz.',
   NineToFive: 'Whenever you lose a life, gain 2 coins.'

@@ -27,6 +27,7 @@ export class ManifestPanel {
   // Row references for flashing
   private shopRowById: Record<string, Phaser.GameObjects.Text> = {};
   private challengeRowById: Record<string, Phaser.GameObjects.Text> = {};
+  private relicRowById: Record<string, Phaser.GameObjects.Text> = {};
   // Stat pill number refs
   private levelNum?: Phaser.GameObjects.Text;
   private livesNum?: Phaser.GameObjects.Text;
@@ -166,6 +167,7 @@ export class ManifestPanel {
     this.shopTexts = [];
     this.challengeTexts = [];
     this.relicTexts = [];
+    this.relicRowById = {};
     this.tooltipNameText.setText('');
     this.tooltipDescText.setText('');
 
@@ -203,7 +205,6 @@ export class ManifestPanel {
         TarotCard: '🪬',
         MetalDetector: '🔎',
         LaundryMoney: '🧼',
-        CheatSheet: '📄',
         PokerChip: '🃏',
         LuckyPenny: '🧧',
         NineToFive: '🏢'
@@ -253,12 +254,15 @@ export class ManifestPanel {
     };
     const seenShopIds: Record<string, boolean> = {};
     for (const [id, n] of Object.entries(runState.stats.shopCounts || {})) {
+      // Hide removed/unknown shop tiles (e.g. deprecated IDs from old runs).
+      if (!shopLabelById[id]) continue;
       const cleanName = stripLeadingEmoji(shopLabelById[id] ?? id);
       goodEntries.push({ label: `${shopIcon(id)} ${cleanName}`, n: n as number, id, type: 'shop' });
       seenShopIds[id] = true;
     }
     // Ensure owned shop tiles appear even if they didn't spawn this level (count 0)
     for (const [ownedId, count] of Object.entries(runState.ownedShopTiles || {})) {
+      if (!shopLabelById[ownedId]) continue;
       if (seenShopIds[ownedId]) continue;
       const cleanName = stripLeadingEmoji(shopLabelById[ownedId] ?? ownedId);
       goodEntries.push({ label: `${shopIcon(ownedId)} ${cleanName}`, n: 0, id: ownedId, type: 'shop' });
@@ -369,6 +373,7 @@ export class ManifestPanel {
         const n = ownedRelics[id] ?? 0;
         const countSuffix = n > 1 ? ` ×${n}` : '';
         const txt = this.scene.add.text(this.x + 12, cursorY, `${relicLabelById[id] ?? id}${countSuffix}`, { fontFamily: 'LTHoop', fontSize: '14px', color: '#e9e9ef' }).setOrigin(0, 0).setDepth(20);
+        this.relicRowById[id] = txt;
         txt.setInteractive({ useHandCursor: true });
         const desc = RELIC_UI_TEXT[id] ?? RELIC_DESCRIPTIONS[id] ?? EXTRA_RELIC_DESCRIPTIONS[id] ?? '';
         txt.on('pointerover', () => {
@@ -437,8 +442,11 @@ export class ManifestPanel {
   }
 
   // Public API: flash a manifest row when a tile procs
-  flashRow(kind: 'shop' | 'challenge', id: string) {
-    const row = kind === 'shop' ? this.shopRowById[id] : this.challengeRowById[id];
+  flashRow(kind: 'shop' | 'challenge' | 'relic', id: string) {
+    const row =
+      kind === 'shop' ? this.shopRowById[id]
+      : kind === 'challenge' ? this.challengeRowById[id]
+      : this.relicRowById[id];
     if (!row) return;
     this.scene.tweens.add({
       targets: row,

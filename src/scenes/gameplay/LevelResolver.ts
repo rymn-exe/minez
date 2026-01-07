@@ -140,6 +140,10 @@ export class LevelResolver {
     this.cartographerAwarded = false;
   }
 
+  hasCartographerAwarded(): boolean {
+    return this.cartographerAwarded;
+  }
+
   markCartographerAwarded(): void {
     this.cartographerAwarded = true;
   }
