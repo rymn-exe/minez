@@ -356,11 +356,14 @@ export class InputHandler {
     const scaleY = this.scene.scale.height / rect.height;
     const x = rawX * scaleX;
     const y = rawY * scaleY;
+    // Flag colour swatches should be clickable even if Phaser input is blocked.
+    if (this.flagPaintMode.domRouteDown?.(x, y)) {
+      return;
+    }
     // Give right-side panel first chance (so board doesn't steal clicks)
     if (this.manifest.domRouteDown?.(x, y)) {
       return;
     }
-    // Flag swatches are now handled by FlagPaintMode internally via Phaser input
     // Board area bounds
     const BOARD_LEFT = PADDING;
     const BOARD_TOP = PADDING;

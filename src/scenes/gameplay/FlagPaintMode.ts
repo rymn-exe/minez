@@ -23,6 +23,7 @@ export class FlagPaintMode {
   private flagSwatches: Phaser.GameObjects.Arc[] = [];
   private flagSwatchHalos: Phaser.GameObjects.Arc[] = [];
   private flagSwatchKeys: FlagColor[] = [];
+  private swatchHit: Array<{ key: FlagColor; x: number; y: number; r: number }> = [];
   private swatchLastClickTs: Record<string, number> = {};
   private swatchNodes: Phaser.GameObjects.GameObject[] = [];
   private disposers: Array<() => void> = [];
@@ -71,18 +72,22 @@ export class FlagPaintMode {
     this.flagSwatches = [];
     this.flagSwatchHalos = [];
     this.flagSwatchKeys = [];
+    this.swatchHit = [];
     
     colors.forEach(([key, fill]) => {
       const halo = this.scene.add.circle(cx, baseY, r + 5, 0x000000, 0)
         .setOrigin(0.5, 0.5)
-        .setStrokeStyle(3, 0x9ae6b4);
+        .setStrokeStyle(3, 0x9ae6b4)
+        .setDepth(50);
       halo.setVisible(false);
       
       const node = this.scene.add.circle(cx, baseY, r, fill, 1)
         .setOrigin(0.5, 0.5)
-        .setStrokeStyle(2, 0x3a3a46);
+        .setStrokeStyle(2, 0x3a3a46)
+        .setDepth(51);
       
-      node.setInteractive({ useHandCursor: true })
+      // Explicit hit area makes this reliable across Phaser shape input edge cases.
+      node.setInteractive(new Phaser.Geom.Circle(0, 0, r), Phaser.Geom.Circle.Contains, { useHandCursor: true } as any)
         .on('pointerdown', () => {
           const now = this.scene.time.now;
           const last: number = (node as any).getData?.('lastClickTs') ?? 0;
@@ -108,6 +113,7 @@ export class FlagPaintMode {
       this.flagSwatchHalos.push(halo);
       this.flagSwatches.push(node);
       this.flagSwatchKeys.push(key);
+      this.swatchHit.push({ key, x: cx, y: baseY, r });
       this.swatchNodes.push(halo, node);
       cx += r * 2 + gap;
     });
@@ -183,6 +189,32 @@ export class FlagPaintMode {
 
   isPaintMode(): boolean {
     return this.paintMode;
+  }
+
+  // DOM fallback route for clicks (covers cases where Phaser hit-testing is blocked by other interactives).
+  domRouteDown(x: number, y: number): boolean {
+    for (const s of this.swatchHit) {
+      const dx = x - s.x;
+      const dy = y - s.y;
+      if (dx * dx + dy * dy <= (s.r + 6) * (s.r + 6)) {
+        const now = this.scene.time.now;
+        const last = this.swatchLastClickTs[s.key] ?? 0;
+        const isDouble = now - last < 250;
+        this.swatchLastClickTs[s.key] = now;
+        const prevColor = runState.flagColor;
+        runState.flagColor = s.key;
+        this.onColorChange(s.key);
+        this.refresh();
+        this.updateCursorAppearance();
+        this.renderAll();
+        if (isDouble) {
+          if (this.paintMode && prevColor === s.key) this.disable();
+          else this.enable();
+        }
+        return true;
+      }
+    }
+    return false;
   }
 
   cleanup(): void {
