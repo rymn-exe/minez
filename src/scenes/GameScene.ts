@@ -141,23 +141,24 @@ export default class GameScene extends Phaser.Scene {
     const BOARD_LEFT = PADDING;
     const BOARD_TOP = PADDING;
     // Side panel aligned to actual board width (fix spacing)
-    const sideX = BOARD_LEFT + this.board.width * this.boardCell + PADDING;
-    this.sideX = sideX;
-    // Align right panel top more closely with the board top while keeping header clearance
-    this.manifest = new ManifestPanel(this, sideX, PADDING + 24, {
+    const rawSideX = BOARD_LEFT + this.board.width * this.boardCell + PADDING;
+    // Use a consistent panel-left + inner padding, so all right-side boxes align.
+    const panelX = Math.max(12, rawSideX - 12);
+    const panelW = Math.min(360, this.scale.width - panelX - 12);
+    const innerX = panelX + 16;
+    this.sideX = innerX;
+    // Align right panel top with the board top
+    this.manifest = new ManifestPanel(this, panelX, BOARD_TOP, {
       hoverProxy: (name, color, desc) => this.hoverSystem.setHover(name, color, desc),
       clearHoverProxy: () => this.hoverSystem.clearHover()
     });
     // Flag color picker (right panel) styled as a card
     {
-      // Align card to the side panel like other cards
-      const mainX = Math.max(12, sideX - 12);
-      const panelW = Math.min(360, this.scale.width - mainX - 12);
-      const cardWidth = Math.max(220, (mainX + panelW - 12) - (sideX - 2));
-      this.flagCardWidth = cardWidth;
+      // Align card to the same panel bounds as the manifest
+      this.flagCardWidth = Math.max(220, panelW - 32);
       // Create title once; position is updated by layoutRightPanel()
       this.flagTitleText = this.add.text(
-        sideX,
+        innerX,
         this.manifest.getBottomY() + 12,
         'Flag Colour',
         { fontFamily: 'LTHoop', fontSize: '16px', color: '#e9e9ef' }

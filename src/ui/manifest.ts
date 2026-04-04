@@ -38,6 +38,7 @@ export class ManifestPanel {
     this.y = y;
     this.hoverProxy = opts?.hoverProxy;
     this.clearHoverProxy = opts?.clearHoverProxy;
+    // NOTE: `x` is the left edge of the right-side panel (not the content inset).
     this.statsText = scene.add.text(x, y, '', { fontFamily: 'LTHoop', fontSize: '14px', color: '#e9e9ef' }).setOrigin(0, 0);
     const emojiFont = 'LTHoop, "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif';
     this.tooltipNameText = scene.add.text(x, y, '', {
@@ -71,25 +72,30 @@ export class ManifestPanel {
     this.statBadges.forEach(b => b.destroy());
     this.statBadges = [];
     this.statsText.setText('');
+    // Layout: single source of truth for panel + inner padding.
+    const panelX = Math.max(12, this.x);
+    const panelW = Math.min(360, this.scene.scale.width - panelX - 12);
+    const innerPadX = 16;
+    const innerX = panelX + innerPadX;
+    const innerRight = panelX + panelW - innerPadX;
+
     // Draw main side panel background (rounded)
     {
-      const mainX = Math.max(12, this.x - 12);
-      const panelW = Math.min(360, this.scene.scale.width - mainX - 12);
       const panelHBase = Math.max(280, this.scene.scale.height - this.y - 30);
       const hoverReserved = 68; // GameScene hover bar (40) + bottom margin (28)
-      const panelTop = this.y - 10;
+      const panelTop = this.y;
       const maxH = Math.max(160, this.scene.scale.height - panelTop - (hoverReserved + 10)); // keep a small gap above hover
       const panelH = Math.min(panelHBase, maxH);
       const bg = this.scene.add.graphics().setDepth(-20);
       bg.fillStyle(0x14151d, 1);
       bg.lineStyle(1, 0x2b2d38, 1);
-      bg.fillRoundedRect(mainX, this.y - 10, panelW, panelH, 16);
-      bg.strokeRoundedRect(mainX, this.y - 10, panelW, panelH, 16);
+      bg.fillRoundedRect(panelX, panelTop, panelW, panelH, 16);
+      bg.strokeRoundedRect(panelX, panelTop, panelW, panelH, 16);
       this.extraNodes.push(bg);
-      // Removed single wide capsule; stats are now individual rounded pills
     }
+
     // Top stats as icon badges (Level, Lives, Coins)
-    const pillsTopY = this.y + 10;
+    const pillsTopY = this.y + 16;
     const emojiFont = 'LTHoop, "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif';
     const drawPill = (emoji: string, value: number, x: number, hoverMsg: string, kind: 'level' | 'lives' | 'coins') => {
       // Create texts first to measure
@@ -151,7 +157,7 @@ export class ManifestPanel {
     };
     // Draw three pills with spacing
     const gapX = 12;
-    let nextX = this.x + 16;
+    let nextX = innerX;
     const levelPill = drawPill('🪜', runState.level, nextX, `You're on Level ${runState.level}`, 'level');
     nextX = levelPill.right + gapX;
     const livesPill = drawPill('❤️', runState.lives, nextX, `You have ${runState.lives} lives`, 'lives');
@@ -172,13 +178,11 @@ export class ManifestPanel {
     // Board Manifest (card-style list)
     const goodColor = '#9ae6b4';
     const badColor = '#fca5a5';
-    this.shopTexts.push(this.scene.add.text(this.x, cursorY, 'Board Manifest', { fontFamily: 'LTHoop', fontSize: '16px', fontStyle: 'bold', color: '#e9e9ef' }).setOrigin(0, 0));
+    this.shopTexts.push(this.scene.add.text(innerX, cursorY, 'Board Manifest', { fontFamily: 'LTHoop', fontSize: '16px', fontStyle: 'bold', color: '#e9e9ef' }).setOrigin(0, 0));
     cursorY += 16;
-    // Compute right edge inside the panel, so we can right-align counts
-    const mainX2 = Math.max(12, this.x - 12);
-    const panelW2 = Math.min(360, this.scene.scale.width - mainX2 - 12);
-    const cardLeft = this.x - 2;
-    const cardRight = mainX2 + panelW2 - 12;
+    // Compute card bounds inside the panel, so we can right-align counts
+    const cardLeft = innerX;
+    const cardRight = innerRight;
     const countRightX = cardRight - 10;
     const cardGfx = this.scene.add.graphics().setDepth(-18);
     this.extraNodes.push(cardGfx);
@@ -284,7 +288,7 @@ export class ManifestPanel {
     }
     // Draw rows: good then bad
     const drawRow = (labelText: string, count: number, labelColor: string, hoverId?: { kind: 'shop' | 'builtinGood' | 'challenge' | 'builtinBad'; id?: string }) => {
-      const leftText = this.scene.add.text(this.x + 10, rowY, labelText, { fontFamily: 'LTHoop', fontSize: '14px', color: labelColor }).setOrigin(0, 0).setDepth(20);
+      const leftText = this.scene.add.text(cardLeft + 10, rowY, labelText, { fontFamily: 'LTHoop', fontSize: '14px', color: labelColor }).setOrigin(0, 0).setDepth(20);
       // Make counts use the same font styling and grey color as labels
       const rightText = this.scene.add.text(countRightX, rowY, String(count), { fontFamily: 'LTHoop', fontSize: '14px', color: labelColor }).setOrigin(1, 0).setDepth(20);
       this.shopTexts.push(leftText, rightText);
@@ -335,8 +339,8 @@ export class ManifestPanel {
           if (this.hoverProxy) this.hoverProxy(labelText, '#e9e9ef', ''); else this.showTooltip(labelText, '#e9e9ef', '');
         }
       };
-      const fullW = Math.max(220, cardRight - cardLeft) - 20;
-      this.domRegions.push({ x: this.x + 10, y: rowY, w: fullW, h: rowH, over: regionOver, out: () => { if (this.clearHoverProxy) this.clearHoverProxy(); else this.clearTooltip(); } });
+      const fullW = Math.max(0, (cardRight - cardLeft) - 20);
+      this.domRegions.push({ x: cardLeft + 10, y: rowY, w: fullW, h: rowH, over: regionOver, out: () => { if (this.clearHoverProxy) this.clearHoverProxy(); else this.clearTooltip(); } });
       rowY += rowH;
     };
     const mutedLabel = '#9aa0a6';
@@ -352,8 +356,8 @@ export class ManifestPanel {
     const cardHeight = (rowY - rowsTopY) + 12;
     cardGfx.lineStyle(1, 0x2b2d38, 1);
     cardGfx.fillStyle(0x171922, 1);
-    cardGfx.fillRoundedRect(cardLeft, rowsTopY - 8, Math.max(220, cardRight - cardLeft), cardHeight, 12);
-    cardGfx.strokeRoundedRect(cardLeft, rowsTopY - 8, Math.max(220, cardRight - cardLeft), cardHeight, 12);
+    cardGfx.fillRoundedRect(cardLeft, rowsTopY - 8, Math.max(0, cardRight - cardLeft), cardHeight, 12);
+    cardGfx.strokeRoundedRect(cardLeft, rowsTopY - 8, Math.max(0, cardRight - cardLeft), cardHeight, 12);
     cursorY = rowsTopY - 8 + cardHeight + 14; // extra breathing room below the card
 
     // (Old 'Challenges' list removed in favor of Tile Distribution breakdown)
@@ -364,12 +368,12 @@ export class ManifestPanel {
     const ownedRelics = runState.ownedRelics || {};
     const relicIds = Object.keys(ownedRelics);
     if (relicIds.length > 0) {
-      this.relicTexts.push(this.scene.add.text(this.x, cursorY, 'Collectibles', { fontFamily: 'LTHoop', fontSize: '16px', fontStyle: 'bold', color: '#e9e9ef' }).setOrigin(0, 0));
+      this.relicTexts.push(this.scene.add.text(innerX, cursorY, 'Collectibles', { fontFamily: 'LTHoop', fontSize: '16px', fontStyle: 'bold', color: '#e9e9ef' }).setOrigin(0, 0));
       cursorY += 18;
       for (const id of relicIds.sort((a, b) => (relicLabelById[a] || a).localeCompare(relicLabelById[b] || b))) {
         const n = ownedRelics[id] ?? 0;
         const countSuffix = n > 1 ? ` ×${n}` : '';
-        const txt = this.scene.add.text(this.x + 12, cursorY, `${relicLabelById[id] ?? id}${countSuffix}`, { fontFamily: 'LTHoop', fontSize: '14px', color: '#e9e9ef' }).setOrigin(0, 0).setDepth(20);
+        const txt = this.scene.add.text(innerX + 12, cursorY, `${relicLabelById[id] ?? id}${countSuffix}`, { fontFamily: 'LTHoop', fontSize: '14px', color: '#e9e9ef' }).setOrigin(0, 0).setDepth(20);
         txt.setInteractive({ useHandCursor: true });
         const desc = RELIC_UI_TEXT[id] ?? RELIC_DESCRIPTIONS[id] ?? EXTRA_RELIC_DESCRIPTIONS[id] ?? '';
         txt.on('pointerover', () => {
@@ -393,8 +397,8 @@ export class ManifestPanel {
           else this.clearTooltip();
         };
         // Use a generous width inside the card, same row height as others
-        const fullW = Math.max(220, (Math.min(360, this.scene.scale.width - Math.max(12, this.x - 12) - 12)) - 20);
-        this.domRegions.push({ x: this.x + 10, y: cursorY, w: fullW, h: 16, over, out });
+        const fullW = Math.max(0, (innerRight - innerX) - 20);
+        this.domRegions.push({ x: innerX + 10, y: cursorY, w: fullW, h: 16, over, out });
         cursorY += 16;
       }
     }
@@ -403,8 +407,8 @@ export class ManifestPanel {
     // Tooltip anchored near bottom of the side column (like shop), not affecting layout
     if (!this.hoverProxy) {
     const tooltipTop = Math.max(this.y, this.scene.scale.height - 110);
-      this.tooltipNameText.setPosition(this.x, tooltipTop);
-      this.tooltipDescText.setPosition(this.x, tooltipTop);
+      this.tooltipNameText.setPosition(innerX, tooltipTop);
+      this.tooltipDescText.setPosition(innerX, tooltipTop);
     }
   }
 

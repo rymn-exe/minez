@@ -166,21 +166,47 @@ export default class ShopScene extends Phaser.Scene {
     }
     // Header and stats (centered title, pills on right)
     this.titleText = this.add.text(this.scale.width / 2, 18, 'Shop', { fontFamily: 'LTHoop', fontSize: '28px', color: '#e9e9ef' }).setOrigin(0.5, 0);
-    // Draw lives/coins pills (styled like right panel)
+    // Draw level/lives/coins pills (right-aligned)
     {
       const emojiFont = 'LTHoop, "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif';
-      const drawPill = (emoji: string, value: number, x: number, kind: 'lives' | 'coins') => {
-        const radius = 16;
-        const y = 18 + radius;
-        const bg = this.add.circle(x, y, radius, 0x2e2e39, 1).setStrokeStyle(1, 0x3a3a46).setOrigin(0.5);
-        const icon = this.add.text(x, y - 10, emoji, { fontFamily: emojiFont, fontSize: '20px', color: '#e9e9ef' }).setOrigin(0.5, 0);
-        const num = this.add.text(x + radius + 8, y - 8, String(value), { fontFamily: 'LTHoop', fontSize: '16px', color: '#e9e9ef' }).setOrigin(0, 0);
-        if (kind === 'lives') this.shopLivesNum = num; else this.shopCoinsNum = num;
-        return num.getBounds().right;
+      const drawPill = (emoji: string, value: number, rightX: number, kind: 'level' | 'lives' | 'coins') => {
+        // Create texts first to measure
+        const icon = this.add.text(0, 0, emoji, { fontFamily: emojiFont, fontSize: '18px', color: '#cfd2ff' }).setOrigin(0, 0.5).setDepth(20);
+        const num = this.add.text(0, 0, String(value), { fontFamily: 'LTHoop', fontSize: '17px', fontStyle: 'bold', color: '#ffffff' }).setOrigin(0, 0.5).setDepth(20);
+        if (kind === 'lives') this.shopLivesNum = num;
+        if (kind === 'coins') this.shopCoinsNum = num;
+        const padX = 10;
+        const gap = 8;
+        const padY = 6;
+        const contentH = Math.max(icon.height, num.height);
+        const pillH = Math.max(28, Math.ceil(contentH + padY * 2));
+        const pillW = Math.ceil(padX + icon.width + gap + num.width + padX);
+        const y = 18 + pillH / 2;
+        const x = Math.floor(rightX - pillW);
+        const bg = this.add.graphics().setDepth(10);
+        bg.lineStyle(1, 0x3a3a46, 1);
+        bg.fillStyle(0x1a1b23, 1);
+        bg.fillRoundedRect(x, y - pillH / 2, pillW, pillH, Math.floor(pillH / 2));
+        bg.strokeRoundedRect(x, y - pillH / 2, pillW, pillH, Math.floor(pillH / 2));
+        icon.setPosition(x + padX, y);
+        num.setPosition(x + padX + icon.width + gap, y);
+        return { left: x, bottom: y + pillH / 2 };
       };
-      const startX = this.scale.width - 240;
-      const right1 = drawPill('❤️', runState.lives, startX, 'lives');
-      drawPill('🟡', runState.gold, right1 + 22, 'coins');
+      const marginR = 24;
+      const gapX = 12;
+      let right = this.scale.width - marginR;
+      const coins = drawPill('🟡', runState.gold, right, 'coins');
+      right = coins.left - gapX;
+      const lives = drawPill('❤️', runState.lives, right, 'lives');
+      right = lives.left - gapX;
+      const level = drawPill('🪜', runState.level, right, 'level');
+      // Use the lowest pill bottom to compute content start Y
+      (this as any).__shopHeaderBottom = Math.max(
+        this.titleText.getBounds().bottom,
+        coins.bottom,
+        lives.bottom,
+        level.bottom
+      );
     }
 
     // Initialize renderers AFTER pills so service purchases can update these numbers immediately.
@@ -232,11 +258,11 @@ export default class ShopScene extends Phaser.Scene {
 
     // Layout metrics (readable layout)
     const margin = 24;
-    const sectionGap = 60;
     const fullW = this.scale.width - margin * 2;
-    const colGap = 36;
-    const rowGap = 28;
-    let topY = 64;
+    const colGap = 22;
+    const rowGap = 22;
+    const headerBottom = ((this as any).__shopHeaderBottom ?? this.titleText.getBounds().bottom) as number;
+    let topY = Math.floor(headerBottom + 26);
     // Footer hover metrics (needed for clamping earlier sections)
     const hoverH = 40;
     const hoverY = this.scale.height - hoverH - 28;
@@ -244,11 +270,18 @@ export default class ShopScene extends Phaser.Scene {
 
     // Tiles row (full width)
     const tilesTitleBottom = this.drawHeader(margin, topY, fullW, 'Tiles', '#a78bfa');
-    const tilesCols = Math.max(1, tileOffers.length); // one centered row like prototype
-    const tilesBottom = this.offerRenderer.renderOffersGrid(tileOffers, margin, tilesTitleBottom, fullW, tilesCols, colGap, rowGap);
+    // Center a fixed-width grid so cards don't get spaced miles apart on wide screens.
+    const tilesCols = Math.max(1, tileOffers.length);
+    const idealCardW = 220;
+    const tilesGridW = Math.min(fullW, tilesCols * idealCardW + (tilesCols - 1) * colGap);
+    const tilesStartX = Math.floor(margin + (fullW - tilesGridW) / 2);
+    const tilesBottom = this.offerRenderer.renderOffersGrid(tileOffers, tilesStartX, tilesTitleBottom, tilesGridW, tilesCols, colGap, rowGap);
 
     // Services section — clamp safely above the hover area
-    const servicesHeaderTop = Math.min(Math.max(tilesBottom + 40, topY + 180), hoverY - 120);
+    // Keep services tight to tiles to avoid dead space, but ensure it fits above the hover bar.
+    const svcH = 142;
+    const maxServicesTop = hoverY - (svcH + 80);
+    const servicesHeaderTop = Math.min(tilesBottom + 18, maxServicesTop);
 
     // Footer hover text area (transparent so hover text appears to float)
     this.add.rectangle(margin, hoverY, hoverW, hoverH, 0x000000, 0).setOrigin(0, 0);
@@ -267,13 +300,14 @@ export default class ShopScene extends Phaser.Scene {
 
     // Services section — header with divider
     const servicesTitleBottom = this.drawHeader(margin, servicesHeaderTop, fullW, 'Services', '#9ae6b4');
-    const svcTop = servicesTitleBottom + 12;
-    const svcColW = 160;
-    const svcGapX = 80;
-    const totalW = 2 * svcColW + svcGapX;
-    const servicesX = Math.floor(this.scale.width / 2 - totalW / 2);
-    this.serviceRenderer.drawServiceCard(servicesX, 'Reroll', 2, 'Reroll the shop', svcTop, svcColW);
-    this.serviceRenderer.drawServiceCard(servicesX + svcColW + svcGapX, 'BuyLife', 3, 'Buy a life', svcTop, svcColW);
+    const svcTop = servicesTitleBottom;
+    const svcCols = 2;
+    const svcIdealW = 220;
+    const svcGridW = Math.min(fullW, svcCols * svcIdealW + (svcCols - 1) * colGap);
+    const svcStartX = Math.floor(margin + (fullW - svcGridW) / 2);
+    const svcCardW = Math.floor((svcGridW - (svcCols - 1) * colGap) / svcCols);
+    this.serviceRenderer.drawServiceCard(svcStartX, svcTop, svcCardW, svcH, 'Reroll', 2, 'Reroll the shop');
+    this.serviceRenderer.drawServiceCard(svcStartX + svcCardW + colGap, svcTop, svcCardW, svcH, 'BuyLife', 3, 'Buy a life');
 
     // Proceed bottom-right (semi-transparent rounded button with LTHoop font)
     // Position proceed button ABOVE the hover bar so it doesn't overlap
@@ -410,8 +444,11 @@ export default class ShopScene extends Phaser.Scene {
     for (const entry of this.offerRenderer.getOfferEntries()) {
       if (this.purchasedIds.has(entry.offer.id)) {
         entry.priceText.setText('SOLD');
+        (entry.coin as any)?.setVisible?.(false);
       } else {
-        entry.priceText.setText(`${this.effectivePrice(entry.offer)}`);
+        const p = this.effectivePrice(entry.offer);
+        entry.priceText.setText(p <= 0 ? 'FREE' : `${p}g`);
+        (entry.coin as any)?.setVisible?.(p > 0);
       }
     }
     // Also refresh service price labels (e.g., after Receipt / free purchase credit)
@@ -428,7 +465,7 @@ export default class ShopScene extends Phaser.Scene {
       if (this.servicePurchased.has(id)) return;
       const offer: Offer = { type: 'service', id, price: basePrice, label: id };
       const price = this.effectivePrice(offer);
-      ref.priceText.setText(String(price));
+      ref.priceText.setText(price <= 0 ? 'FREE' : `${price}g`);
       if (ref.coin) (ref.coin as any).setVisible?.(price > 0);
     };
     update('Reroll', 2);
