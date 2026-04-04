@@ -49,6 +49,23 @@ function floodReveal(board: Board, x: number, y: number, visited: Set<number>, r
   }
 }
 
+// Shop tiles are bonuses and should not “delete” the information value of a 0-tile.
+// If a revealed shop tile has underlying number=0, propagate like a Safe flood reveal would.
+function floodFromZeroLike(board: Board, x: number, y: number, res: RevealResult) {
+  const visited = new Set<number>();
+  // Mark the origin as visited so we don't try to reveal it again.
+  visited.add(indexAt(board, x, y));
+  for (const p of neighbors(board, x, y)) {
+    const nt = board.tiles[indexAt(board, p.x, p.y)];
+    if (nt.revealed || nt.flagged) continue;
+    if (nt.kind === TileKind.Safe) {
+      floodReveal(board, p.x, p.y, visited, res);
+    } else if (nt.kind === TileKind.Number) {
+      revealTile(board, p.x, p.y, false);
+    }
+  }
+}
+
 export function revealTile(board: Board, x: number, y: number, byUser: boolean = false): RevealResult {
   const res: RevealResult = { lifeDelta: 0, goldDelta: 0, endedLevel: false };
   const tile = board.tiles[indexAt(board, x, y)];
@@ -210,6 +227,10 @@ export function revealTile(board: Board, x: number, y: number, byUser: boolean =
       }
       applyShopTileOnReveal(tile, res);
       events.emit(GameEvent.TileRevealed, { tile });
+      // If this shop tile was sitting on a would-be 0, preserve the normal “open area” UX.
+      if (tile.number === 0) {
+        floodFromZeroLike(board, x, y, res);
+      }
       break;
     }
     case TileKind.Safe: {

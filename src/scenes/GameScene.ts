@@ -35,6 +35,7 @@ export default class GameScene extends Phaser.Scene {
   private board!: Board;
   private tiles: Phaser.GameObjects.Rectangle[][] = [];
   private numbers: Phaser.GameObjects.Text[][] = [];
+  private cornerNums: Phaser.GameObjects.Text[][] = [];
   private boardCell: number = CELL;
   private tileRenderer!: TileRenderer;
   private manifest!: ManifestPanel;
@@ -198,6 +199,7 @@ export default class GameScene extends Phaser.Scene {
     for (let y = 0; y < this.board.height; y++) {
       this.tiles[y] = [];
       this.numbers[y] = [];
+      this.cornerNums[y] = [];
       for (let x = 0; x < this.board.width; x++) {
         const rx = BOARD_LEFT + x * this.boardCell + this.boardCell / 2;
         const ry = BOARD_TOP + y * this.boardCell + this.boardCell / 2;
@@ -207,6 +209,15 @@ export default class GameScene extends Phaser.Scene {
         this.tiles[y][x] = rect;
         const label = this.add.text(rx, ry, '', { fontFamily: 'LTHoop', fontSize: '16px', color: '#d6d6dc' }).setOrigin(0.5).setDepth(1001);
         this.numbers[y][x] = label;
+
+        // Small corner number overlay (used for revealed shop tiles to preserve clue value)
+        const pad = Math.max(3, Math.floor(this.boardCell * 0.12));
+        const cx = rx + (this.boardCell / 2) - pad;
+        const cy = ry + (this.boardCell / 2) - pad;
+        const cLabel = this.add.text(cx, cy, '', { fontFamily: 'LTHoop', fontSize: '11px', color: '#94a3b8' })
+          .setOrigin(1, 1)
+          .setDepth(1002);
+        this.cornerNums[y][x] = cLabel;
       }
     }
 
@@ -226,7 +237,7 @@ export default class GameScene extends Phaser.Scene {
     this.levelResolver = new LevelResolver(this, this.board, this.manifest);
 
     // Initialize tile renderer
-    this.tileRenderer = new TileRenderer(this, this.board, this.tiles, this.numbers, this.boardCell);
+    this.tileRenderer = new TileRenderer(this, this.board, this.tiles, this.numbers, this.cornerNums, this.boardCell);
 
     // Initialize input handler (after tiles are created)
     const resolvingEndRef = { current: this.resolvingEnd };

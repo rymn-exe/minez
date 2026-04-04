@@ -279,12 +279,15 @@ export function generateLevel(width: number, height: number): GenerationResult {
     spawnedById['1Up'] = (spawnedById['1Up'] ?? 0) + 1;
   }
 
-  // Set numbers for remaining hidden -> numbers/safe
+  // Compute numbers for ALL non-mine tiles.
+  // - Hidden tiles become Safe/Number.
+  // - Special tiles (Shop/Challenge/Ore/X) keep their kind, but still store `number`
+  //   so the UI can optionally show the underlying clue value.
   for (const tile of board.tiles) {
+    if (tile.kind === TileKind.Mine) continue;
+    const n = countAdjMines(board, tile.pos.x, tile.pos.y);
+    tile.number = n;
     if (tile.kind === TileKind.Hidden) {
-      // compute number
-      const n = countAdjMines(board, tile.pos.x, tile.pos.y);
-      tile.number = n;
       tile.kind = n === 0 ? TileKind.Safe : TileKind.Number;
     }
   }
